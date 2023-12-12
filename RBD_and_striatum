@@ -1,0 +1,412 @@
+# Loading required libraries
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(tableone)
+library(tidyr)
+library(hrbrthemes)
+library(glue)
+library(ggtext)
+library(readxl)
+library(tidyverse)
+library(ggpubr)
+library(palmerpenguins)
+library(gridExtra)
+library(lemon)
+library(gtable)
+library(patchwork)
+
+# Importing the dataset
+Age <- read_delim("C:/Users/mehdi/Desktop/Projects/14 - Congress/New dataset/Age.txt", 
+                  delim = "\t", escape_double = FALSE, 
+                  trim_ws = TRUE)
+
+Edu <- read_delim("C:/Users/mehdi/Desktop/Projects/14 - Congress/New dataset/Edu.txt", 
+                  delim = "\t", escape_double = FALSE, 
+                  trim_ws = TRUE)
+Edu <- Edu[ , -2]
+
+
+Demo <- read_delim("C:/Users/mehdi/Desktop/Projects/14 - Congress/New dataset/Demo.txt", 
+                   delim = "\t", escape_double = FALSE, 
+                   trim_ws = TRUE)
+
+Cohort <- read_delim("C:/Users/mehdi/Desktop/Projects/14 - Congress/New dataset/Cohort.txt", 
+                     delim = "\t", escape_double = FALSE, 
+                     trim_ws = TRUE)
+
+ESS <- read_delim("C:/Users/mehdi/Desktop/Projects/14 - Congress/New dataset/ESS.txt", 
+                  delim = "\t", escape_double = FALSE, 
+                  trim_ws = TRUE)
+ESS <- ESS[ , c(1 , 10)]
+
+MDSI <- read_delim("C:/Users/mehdi/Desktop/Projects/14 - Congress/New dataset/MDSI.txt", 
+                   delim = "\t", escape_double = FALSE, 
+                   trim_ws = TRUE)
+
+MDSII <- read_delim("C:/Users/mehdi/Desktop/Projects/14 - Congress/New dataset/MDSII.txt", 
+                    delim = "\t", escape_double = FALSE, 
+                    trim_ws = TRUE)
+
+MDSIII <- read_delim("C:/Users/mehdi/Desktop/Projects/14 - Congress/New dataset/MDSIII.txt", 
+                     delim = "\t", escape_double = FALSE, 
+                     trim_ws = TRUE)
+
+MoCA <- read_delim("C:/Users/mehdi/Desktop/Projects/14 - Congress/New dataset/MoCA.txt", 
+                   delim = "\t", escape_double = FALSE, 
+                   trim_ws = TRUE)
+
+Schwab <- read_delim("C:/Users/mehdi/Desktop/Projects/14 - Congress/New dataset/Schwab.txt", 
+                     delim = "\t", escape_double = FALSE, 
+                     trim_ws = TRUE)
+
+RBDSQt <- read_delim("C:/Users/mehdi/Desktop/Projects/14 - Congress/New dataset/RBDSQt.txt", 
+                     delim = "\t", escape_double = FALSE, 
+                     trim_ws = TRUE) 
+
+mov <- RBDSQt[ , c(1 , 11)]
+
+DaT <- read_delim("C:/Users/mehdi/Desktop/Projects/14 - Congress/New dataset/DaT.txt", 
+                  delim = "\t", escape_double = FALSE, 
+                  trim_ws = TRUE)
+
+
+Mydataset <- merge(Age , Cohort[ , c(1,2)] , by = "PATNO")
+Mydataset <- merge(Mydataset , Demo[ , c(1,2,3)] , by = "PATNO")
+Mydataset <- merge(Mydataset , Edu[ , c(1,2)] , by = "PATNO")
+Mydataset <- merge(Mydataset , ESS[ , c(1,2)] , by = "PATNO")
+Mydataset <- merge(Mydataset , MDSI[ , c(1,2)] , by = "PATNO")
+Mydataset <- merge(Mydataset , MDSII[ , c(1,2)] , by = "PATNO")
+Mydataset <- merge(Mydataset , MDSIII[ , c(1,2)] , by = "PATNO")
+Mydataset <- merge(Mydataset , MoCA[ , c(1,2)] , by = "PATNO")
+Mydataset <- merge(Mydataset , Schwab[ , c(1,2)] , by = "PATNO")
+Mydataset <- merge(Mydataset , RBDSQt[ , c(1,15)] , by = "PATNO")
+Mydataset <- merge(Mydataset , mov[ , c(1,2)] , by = "PATNO")
+Mydataset <- merge(Mydataset , DaT[ , c(1:7)] , by = "PATNO")
+
+# Converting the "MVAWAKEN" variable into a group variable
+Mydataset$MVAWAKEN <- as.factor(Mydataset$MVAWAKEN)
+
+Mydataset$RBDSQ_G <- ifelse(test = Mydataset$Tot > 5 , 1 , 0)
+Mydataset$RBDSQ_G <- as.factor(Mydataset$RBDSQ_G)
+
+Mydataset$SEX <- ifelse(Mydataset$SEX == 0 , "F" , "M")
+Mydataset$HANDED <- ifelse(Mydataset$HANDED == 1 , "R" , ifelse(Mydataset$HANDED == 2 , "L" , "B"))
+
+poor_sleep <- filter(Mydataset , Mydataset$RBDSQ_G == 1)
+good_sleep <- filter(Mydataset , Mydataset$RBDSQ_G == 0)
+
+table <- CreateTableOne(data = Mydataset)
+table
+summary(table)
+
+tablet <- CreateTableOne(data = Mydataset , strata = "RBDSQ_G")
+tablet
+summary(tablet)
+
+tablep <- CreateTableOne(data = poor_sleep , strata = "MVAWAKEN")
+tablep
+summary(tablep)
+
+tableg <- CreateTableOne(data = good_sleep , strata = "MVAWAKEN")
+tableg
+summary(tableg)
+
+results <- list()
+
+model1p <- aov(formula = DATSCAN_CAUDATE_R ~ MVAWAKEN + Age + SEX + HANDED + EDUCYRS ,
+               data = poor_sleep)
+summary(model1p)
+results[["Right caudate in poor sleepers"]] <- car::Anova(model1p)
+
+
+
+
+model2p <- aov(formula = DATSCAN_CAUDATE_L ~ MVAWAKEN + Age + SEX + HANDED + EDUCYRS ,
+               data = poor_sleep)
+summary(model2p)
+results[["Left caudate in poor sleepers"]] <- car::Anova(model2p)
+
+
+
+model3p <- aov(formula = DATSCAN_PUTAMEN_R ~ MVAWAKEN + Age + SEX + HANDED + EDUCYRS ,
+               data = poor_sleep)
+summary(model3p)
+results[["Right putamen in poor sleepers"]] <- car::Anova(model3p)
+
+
+
+model4p <- aov(formula = DATSCAN_PUTAMEN_L ~ MVAWAKEN + Age + SEX + HANDED + EDUCYRS ,
+               data = poor_sleep)
+summary(model4p)
+results[["Left putamen in poor sleepers"]] <- car::Anova(model4p)
+
+
+
+
+
+
+model1g <- aov(formula = DATSCAN_CAUDATE_R ~ MVAWAKEN + Age + SEX + HANDED + EDUCYRS ,
+               data = good_sleep)
+summary(model1g)
+results[["Right caudate in good sleepers"]] <- car::Anova(model1g)
+
+
+
+
+model2g <- aov(formula = DATSCAN_CAUDATE_L ~ MVAWAKEN + Age + SEX + HANDED + EDUCYRS ,
+               data = good_sleep)
+summary(model2g)
+results[["Left caudate in good sleepers"]] <- car::Anova(model2g)
+
+
+
+model3g <- aov(formula = DATSCAN_PUTAMEN_R ~ MVAWAKEN + Age + SEX + HANDED + EDUCYRS ,
+               data = good_sleep)
+summary(model3g)
+results[["Right putamen in good sleepers"]] <- car::Anova(model3g)
+
+
+
+model4g <- aov(formula = DATSCAN_PUTAMEN_L ~ MVAWAKEN + Age + SEX + HANDED + EDUCYRS ,
+               data = good_sleep)
+summary(model4g)
+results[["Left putamen in good sleepers"]] <- car::Anova(model4g)
+
+
+
+poor_sleep$MVAWAKEN <- ifelse(poor_sleep$MVAWAKEN == 0,
+                              "SMD-",
+                              "SMD+")
+
+
+
+
+a <- ggplot(data = poor_sleep , mapping = aes(x = MVAWAKEN,
+                                              y = DATSCAN_CAUDATE_R,
+                                              fill = MVAWAKEN)) + 
+  geom_violin(scale = "count", trim=FALSE) +
+  labs(title = "Right caudate nucleus",
+       x = NULL,
+       y = NULL) +
+  stat_summary(fun = mean , geom = "point", shape = 18 , size = 2 , color = "black") +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", color = "black", width = 0.2 , size = 0.5) +
+  geom_boxplot(width=0.1 , outlier.shape = NA) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "none")
+
+
+
+
+b <- ggplot(data = poor_sleep , mapping = aes(x = MVAWAKEN,
+                                              y = DATSCAN_CAUDATE_L,
+                                              fill = MVAWAKEN)) + 
+  geom_violin(scale = "count", trim=FALSE) +
+  labs(title = "Left caudate nucleus",
+       x = NULL,
+       y = "Dopamine uptake") +
+  stat_summary(fun = mean , geom = "point", shape = 18 , size = 2 , color = "black") +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", color = "black", width = 0.2 , size = 0.5) +
+  geom_boxplot(width=0.1 , outlier.shape = NA) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "none")
+
+
+c <- ggplot(data = poor_sleep , mapping = aes(x = MVAWAKEN,
+                                              y = DATSCAN_PUTAMEN_R,
+                                              fill = MVAWAKEN)) + 
+  geom_violin(scale = "count", trim=FALSE) +
+  labs(title = "Right putamen nucleus",
+       x = NULL,
+       y = NULL) +
+  stat_summary(fun = mean , geom = "point", shape = 18 , size = 2 , color = "black") +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", color = "black", width = 0.2 , size = 0.5) +
+  geom_boxplot(width=0.1 , outlier.shape = NA) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "none")
+
+
+d <- ggplot(data = poor_sleep , mapping = aes(x = MVAWAKEN,
+                                              y = DATSCAN_PUTAMEN_L,
+                                              fill = MVAWAKEN)) + 
+  geom_violin(scale = "count", trim=FALSE) +
+  labs(title = "Left putamen nucleus",
+       x = NULL,
+       y = NULL) +
+  stat_summary(fun = mean , geom = "point", shape = 18 , size = 2 , color = "black") +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", color = "black", width = 0.2 , size = 0.5) +
+  geom_boxplot(width=0.1 , outlier.shape = NA) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "none")
+
+
+a_legend <- ggplot(data = poor_sleep , mapping = aes(x = MVAWAKEN,
+                                                     y = DATSCAN_CAUDATE_R,
+                                                     fill = MVAWAKEN)) + 
+  geom_violin(scale = "count", trim=FALSE) +
+  labs(title = "Right caudate nucleus",
+       x = NULL,
+       y = "Dopamine uptake") +
+  stat_summary(fun = mean , geom = "point", shape = 18 , size = 2 , color = "black") +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", color = "black", width = 0.2 , size = 0.5) +
+  geom_boxplot(width=0.1) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "bottom") +
+  guides(fill = guide_legend(title = NULL)) +
+  scale_fill_discrete(labels=c('SMD- (Not sleep moving disorder)',
+                               'SMD+ (Sleep moving disorder)'))
+
+
+
+extract_legend <- function(my_ggp) {
+  step1 <- ggplot_gtable(ggplot_build(my_ggp))
+  step2 <- which(sapply(step1$grobs, function(x) x$name) == "guide-box")
+  step3 <- step1$grobs[[step2]]
+  return(step3)
+}
+shared_legend <- extract_legend(a_legend)
+
+myplot <- grid.arrange(arrangeGrob(b , a , d , c , ncol = 4),
+                       shared_legend, nrow = 2, heights = c(10, 1))
+
+
+
+
+
+
+
+
+
+good_sleep$MVAWAKEN <- ifelse(good_sleep$MVAWAKEN == 0,
+                              "SMD-",
+                              "SMD+")
+
+
+
+
+ag <- ggplot(data = good_sleep , mapping = aes(x = MVAWAKEN,
+                                               y = DATSCAN_CAUDATE_R,
+                                               fill = MVAWAKEN)) + 
+  geom_violin(scale = "count", trim=FALSE) +
+  labs(title = "Right caudate nucleus",
+       x = NULL,
+       y = NULL) +
+  stat_summary(fun = mean , geom = "point", shape = 18 , size = 2 , color = "black") +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", color = "black", width = 0.2 , size = 0.5) +
+  geom_boxplot(width=0.1) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "none")
+
+
+
+
+bg <- ggplot(data = good_sleep , mapping = aes(x = MVAWAKEN,
+                                               y = DATSCAN_CAUDATE_L,
+                                               fill = MVAWAKEN)) + 
+  geom_violin(scale = "count", trim=FALSE) +
+  labs(title = "Left caudate nucleus",
+       x = NULL,
+       y = "Dopamine uptake") +
+  stat_summary(fun = mean , geom = "point", shape = 18 , size = 2 , color = "black") +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", color = "black", width = 0.2 , size = 0.5) +
+  geom_boxplot(width=0.1) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "none")
+
+
+cg <- ggplot(data = good_sleep , mapping = aes(x = MVAWAKEN,
+                                               y = DATSCAN_PUTAMEN_R,
+                                               fill = MVAWAKEN)) + 
+  geom_violin(scale = "count", trim=FALSE) +
+  labs(title = "Right putamen nucleus",
+       x = NULL,
+       y = NULL) +
+  stat_summary(fun = mean , geom = "point", shape = 18 , size = 2 , color = "black") +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", color = "black", width = 0.2 , size = 0.5) +
+  geom_boxplot(width=0.1) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "none")
+
+
+dg <- ggplot(data = good_sleep , mapping = aes(x = MVAWAKEN,
+                                               y = DATSCAN_PUTAMEN_L,
+                                               fill = MVAWAKEN)) + 
+  geom_violin(scale = "count", trim=FALSE) +
+  labs(title = "Left putamen nucleus",
+       x = NULL,
+       y = NULL) +
+  stat_summary(fun = mean , geom = "point", shape = 18 , size = 2 , color = "black") +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", color = "black", width = 0.2 , size = 0.5) +
+  geom_boxplot(width=0.1) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "none")
+
+
+ag_legend <- ggplot(data = good_sleep , mapping = aes(x = MVAWAKEN,
+                                                      y = DATSCAN_CAUDATE_R,
+                                                      fill = MVAWAKEN)) + 
+  geom_violin(scale = "count", trim=FALSE) +
+  labs(title = "Right caudate nucleus",
+       x = NULL,
+       y = "Dopamine uptake") +
+  stat_summary(fun = mean , geom = "point", shape = 18 , size = 2 , color = "black") +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", color = "black", width = 0.2 , size = 0.5) +
+  geom_boxplot(width=0.1) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "bottom") +
+  guides(fill = guide_legend(title = NULL)) +
+  scale_fill_discrete(labels=c('SMD- (Not sleep moving disorder)',
+                               'SMD+ (Sleep moving disorder)'))
+
+
+
+extract_legend <- function(my_ggp) {
+  step1 <- ggplot_gtable(ggplot_build(my_ggp))
+  step2 <- which(sapply(step1$grobs, function(x) x$name) == "guide-box")
+  step3 <- step1$grobs[[step2]]
+  return(step3)
+}
+sharedg_legend <- extract_legend(ag_legend)
+
+myplotg <- grid.arrange(arrangeGrob(bg , ag , dg , cg , ncol = 4),
+                        sharedg_legend, nrow = 2, heights = c(10, 1))
