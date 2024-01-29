@@ -1,0 +1,266 @@
+# Logistic regression by Erfan Naghavi
+
+# Section 1: Loading libraries
+library(readr)
+library(tableone)
+library(carData)
+library(car)
+library(splines)
+library(aod)
+library(ggplot2)
+library(tidyverse)
+library(coefplot)
+
+# Section 2: Importing and cleaning dataset:
+mydata <- read_delim("C:/Users/mehdi/Desktop/Projects/19 - SNS 2024/Raw data/Status.txt", 
+                     delim = "\t", escape_double = FALSE, 
+                     trim_ws = TRUE)
+
+age <- read_delim("C:/Users/mehdi/Desktop/Projects/19 - SNS 2024/Raw data/Age.txt", 
+                  delim = "\t", escape_double = FALSE, 
+                  trim_ws = TRUE)
+
+
+ses <- read_delim("C:/Users/mehdi/Desktop/Projects/19 - SNS 2024/Raw data/SES.txt", 
+                  delim = "\t", escape_double = FALSE, 
+                  trim_ws = TRUE)
+
+ses <- subset(ses , EVENT_ID == "SC")
+ses <- ses[ , -2]
+
+
+demo <- read_delim("C:/Users/mehdi/Desktop/Projects/19 - SNS 2024/Raw data/Demographics.txt", 
+                   delim = "\t", escape_double = FALSE, 
+                   trim_ws = TRUE)
+
+mdsi <- read_delim("C:/Users/mehdi/Desktop/Projects/19 - SNS 2024/Raw data/MDSI.txt", 
+                   delim = "\t", escape_double = FALSE, 
+                   trim_ws = TRUE)
+
+mdsii <- read_delim("C:/Users/mehdi/Desktop/Projects/19 - SNS 2024/Raw data/MDSII.txt", 
+                    delim = "\t", escape_double = FALSE, 
+                    trim_ws = TRUE)
+
+mdsiii <- read_delim("C:/Users/mehdi/Desktop/Projects/19 - SNS 2024/Raw data/MDSIII.txt", 
+                     delim = "\t", escape_double = FALSE, 
+                     trim_ws = TRUE)
+
+ess <- read_delim("C:/Users/mehdi/Desktop/Projects/19 - SNS 2024/Raw data/ESS.txt", 
+                  delim = "\t", escape_double = FALSE, 
+                  trim_ws = TRUE)
+
+schwab <- read_delim("C:/Users/mehdi/Desktop/Projects/19 - SNS 2024/Raw data/Shwab.txt", 
+                     delim = "\t", escape_double = FALSE, 
+                     trim_ws = TRUE)
+schwab <- subset(schwab , EVENT_ID == "BL")
+schwab <- schwab[ , -2]
+
+rbdsq <- read_delim("C:/Users/mehdi/Desktop/Projects/19 - SNS 2024/Raw data/RBDSQ.txt", 
+                    delim = "\t", escape_double = FALSE, 
+                    trim_ws = TRUE)
+rbdsq <- subset(rbdsq , EVENT_ID == "BL")
+rbdsq <- rbdsq[ , -2]
+
+
+moca <- read_delim("C:/Users/mehdi/Desktop/Projects/19 - SNS 2024/Raw data/moca.txt", 
+                   delim = "\t", escape_double = FALSE, 
+                   trim_ws = TRUE)
+moca <- subset(moca , EVENT_ID == "V12")
+moca <- moca[ , -2]
+moca$Moca <- ifelse(moca$moca <= 25 , 1 , 0)
+moca <- moca[ , -2]
+colnames(moca)[2] <- "moca"
+
+
+mydataset <- merge(mydata , age[ , c(1,2)] , by = "PATNO")                     
+mydataset <- merge(mydataset , demo[ , c(1:3)] , by = "PATNO")                     
+mydataset <- merge(mydataset , ses[ , c(1,2)] , by = "PATNO")                     
+mydataset <- merge(mydataset , mdsi[ , c(1,2)] , by = "PATNO")                     
+mydataset <- merge(mydataset , mdsii[ , c(1,2)] , by = "PATNO")                     
+mydataset <- merge(mydataset , mdsiii[ , c(1,2)] , by = "PATNO")                     
+mydataset <- merge(mydataset , schwab[ , c(1,2)] , by = "PATNO")                     
+mydataset <- merge(mydataset , ess[ , c(1,2)] , by = "PATNO")                     
+mydataset <- merge(mydataset , rbdsq[ , c(1,2)] , by = "PATNO")                     
+mydataset <- merge(mydataset , moca[ , c(1,2)] , by = "PATNO")                     
+
+mydataset$SEX <- as.factor(mydataset$SEX)
+mydataset$HANDED <- as.factor(mydataset$HANDED)
+mydataset$moca <- as.factor(mydataset$moca)
+
+mydataset <- subset(mydataset , Status != c("SWEDD" , "Healthy Control"))
+mydataset$moca <- ifelse(mydataset$moca == 0 , "Normal" , "Cognitive impairment")
+mydataset$SEX <- ifelse(mydataset$SEX == 0 , "Female" , "Male")
+mydataset$HANDED <- ifelse(mydataset$HANDED == 1, "Right", ifelse(mydataset$HANDED == 2, "Left", "Mixed"))
+
+# The data is cleaned and prepared.
+
+
+
+# Section 3: Creating descriptives:
+
+table1 <- CreateTableOne(data = mydataset)
+table1
+
+table2 <- CreateTableOne(data = mydataset , strata = "moca")
+table2
+
+
+# Section 4: Binomial (dichotomous) logistic regression
+# Section 4.1: Releveling categorical variables:
+
+mydataset$moca <- factor(mydataset$moca,
+                         levels = c("Normal", "Cognitive impairment"))
+mydataset$moca <-relevel(mydataset$moca, "Normal")
+
+
+mydataset$SEX <- factor(mydataset$SEX,
+                        levels = c("Female", "Male"))
+mydataset$SEX <-relevel(mydataset$SEX, "Male")
+
+# Section 4.2: GLM for logistic regression:
+cogmodel2 <- glm(moca ~ Tot + Age + SEX + Edu + MDSIII , data = mydataset, family = binomial())
+summary(cogmodel2)
+
+modelchi2 <- cogmodel2$null.deviance - cogmodel2$deviance
+modelchi2
+chidf2 <- cogmodel2$df.null - cogmodel2$df.residual
+chidf2
+chisq.prob2 <- 1 - pchisq(modelchi2, chidf2)
+chisq.prob2
+
+
+# Section 4.3: Calculating R^2s for the model:
+
+logisticPseudoR2s <- function(LogModel) {
+  dev <- LogModel$deviance
+  nullDev <- LogModel$null.deviance
+  modelN <- length(LogModel$fitted.values)
+  R.l <- 1 - dev / nullDev
+  R.cs <- 1- exp ( -(nullDev - dev) / modelN)
+  R.n <- R.cs / ( 1 - ( exp (-(nullDev / modelN))))
+  cat("Pseudo R^2 for logistic regression\n")
+  cat("Hosmer and Lemeshow R^2 ", round(R.l, 3), "\n")
+  cat("Cox and Snell R^2 ", round(R.cs, 3), "\n")
+  cat("Nagelkerke R^2 ", round(R.n, 3), "\n")
+}
+logisticPseudoR2s(cogmodel2)
+
+
+# Section 4.4: Calculating odds ratio and confidence intervals:
+exp(cogmodel2$coefficients)
+exp(confint(cogmodel2))
+
+# Section 4.5: Calculating some useful, maybe required, variables:
+
+mydataset$predicted.probabilities <- fitted(cogmodel2)
+mydataset$standardized.residuals <- rstandard(cogmodel2)
+mydataset$studentized.residuals <- rstudent(cogmodel2)
+mydataset$dfbeta <- dfbeta(cogmodel2)
+mydataset$dffit <- dffits(cogmodel2)
+mydataset$leverage <- hatvalues(cogmodel2)
+
+head(mydataset[, c("moca", "Age", "SEX", "MDSIII" , "Edu", "Tot", "predicted.probabilities")])
+
+mydataset[, c("leverage", "studentized.residuals", "dfbeta")]
+
+
+# Section 4.6: Checking for multicollinearity between included variables:
+vif(cogmodel2)
+1/vif(cogmodel2)
+
+mydataset$logAgent <- log(mydataset$Age)*mydataset$Age
+mydataset$logAgent
+
+mydataset$logEdunt <- log(mydataset$Edu)*mydataset$Edu
+mydataset$logEdunt
+
+mydataset$logMDSIIInt <- log(mydataset$MDSIII)*mydataset$MDSIII
+mydataset$logMDSIIInt
+
+cogTest.1 <- glm(moca ~ Tot + Age + SEX + Edu + MDSIII + logEdunt + logAgent + logMDSIIInt,
+                 data = mydataset,
+                 family = binomial())
+summary(cogTest.1)
+
+
+
+
+# Section 4.7: Creating some plots for our model:
+# Section 4.7.1: Plot type 1
+mydataset$mocap <- ifelse(mydataset$moca == "Normal" , 0 , 1)
+plot1 <- ggplot(mydataset, aes(x=Tot, y=mocap)) +
+  geom_jitter(height = 0.05 , alpha = 0.7) +
+  geom_smooth(method="glm", method.args=list(family="binomial"), se=TRUE) +
+  theme_classic() + 
+  labs(title = NULL,
+       x = "RBDSQ score",
+       y = "Cognition status") +
+  theme(plot.title = element_text(size = 14, face = "bold"),
+        axis.title = element_text(size = 13),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "left") +
+  scale_y_continuous(labels = c("Normal cognition", "Impaired cognition"),
+                     breaks = c(0, 1))
+plot1
+
+# Section 4.7.2: Plot type 2
+
+dem_sum <- mydataset %>%
+  group_by(Tot) %>%
+  summarize(prop_dem = mean(mocap) , count = n())
+dem_sum
+
+plot2 <- ggplot(dem_sum , aes(x = Tot , y = prop_dem)) +
+  geom_point() +
+  theme_classic() +
+  labs(title = "Predicting cognitive impairment by RBDSQ",
+       x = "RBDSQ score",
+       y = "Cognitive impairment") +
+  theme(plot.title = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "none")
+plot2
+
+
+# Section 4.7.3: Plot type 3
+plot3 <- coefplot(cogmodel2 , innerCI = 2 , outerCI = 0 , intercept = FALSE,
+                  title = "Logistic regression" , ylab = "Predictors",
+                  decreasing =  TRUE,
+                  newNames = c(MDSIII = "MDS-UPDRS III" , Edu = "Education",
+                               SEXFemale = "Female gender",
+                               Tot = "RBDSQ score"))
+plot3
+
+
+
+# Section 4.7.4: Plot type 4
+new_data <- data.frame(Tot = seq(min(mydataset$Tot), max(mydataset$Tot), length.out = 30),
+                       Age = mean(mydataset$Age),
+                       SEX = as.factor("Male"), Edu = mean(mydataset$Edu),
+                       MDSIII = mean(mydataset$MDSIII))
+
+new_data <- new_data |> mutate(probability = predict(cogmodel2,
+                                                     newdata = new_data,
+                                                     type = "response"))
+
+plot4 <- ggplot(data = new_data, aes(x = Tot , y = probability)) + geom_line() + 
+  theme_classic() +
+  labs(title = "Estimating the probability of cognitive impairment by RBDSQ score: A male patient of average age education, and MDS-UPDRS III score",
+       x = "RBDSQ score",
+       y = "The probability of cognitive impairment") +
+  theme(plot.title = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.position = "none")
+
+
+
+plot4
+
+# End
+# Good luck!
+# Erfan Naghavi
