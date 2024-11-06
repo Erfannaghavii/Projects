@@ -1,0 +1,499 @@
+# Loading libraries
+library(writexl)
+library(readxl)
+library(ggplot2)
+library(lme4)
+library(dplyr)
+# library(lmerTest)
+library(pbkrtest)
+library(maps)
+library(afex)
+library(ggplot2)
+library(tableone)
+
+# Loading the dataset
+Finaldataset_MPH <- read.csv("C:/Users/mehdi/Desktop/Projects/12 - MPH proposal (Ongoing)/Final_8.csv")
+
+# Doing some modifications:
+Finaldataset_MPH$income<- Finaldataset_MPH$World.Bank.s.income.classification
+Finaldataset_MPH$income<- as.factor(Finaldataset_MPH$income)
+Finaldataset_MPH$hdi<- as.numeric(Finaldataset_MPH$hdi)
+Finaldataset_MPH$income <- relevel(Finaldataset_MPH$income, ref = "Low-income countries")
+
+
+a <- numeric(nrow(Finaldataset_MPH))
+b <- numeric(nrow(Finaldataset_MPH))
+c <- numeric(nrow(Finaldataset_MPH))
+for (i in 1:nrow(Finaldataset_MPH)) {
+  a[i] <- as.numeric(Finaldataset_MPH$number[i])
+  b[i] <- as.numeric(Finaldataset_MPH$population[i])
+  c[i] <- as.numeric(Finaldataset_MPH$daly[i])
+  Finaldataset_MPH$death_pop[i] <- (a[i]/b[i]) * 1000000
+  Finaldataset_MPH$death_pop2[i] <- (c[i]/b[i]) * 1000000
+  
+}
+
+# Dataset names
+names(Finaldataset_MPH)
+
+Finaldataset_MPH <- Finaldataset_MPH[ , -c(7 , 8 ,  9 , 11  ,12 , 13)]
+
+names <- c("location" , "year", "daly", "pop65", "lit15", "popm", "death", "population",
+           "hdi","income","death_pop", "daly_pop")
+
+colnames(Finaldataset_MPH) <- names
+
+# Scaling continuous variables
+Finaldataset_MPH2 <- Finaldataset_MPH %>%
+  mutate(across(c(daly, pop65, lit15, popm, death,
+                  hdi, death_pop, daly_pop), scale))
+
+# LMEM on not-scaled data: Transforming using logarithms
+# model1 <- lmer(log(death_pop) ~ 1 + popm + pop65 + year + income  + hdi + (1 + year | location) , data=Finaldataset_MPH )
+# model2 <- lmer(log(death_pop) ~ 1 + popm + pop65 + year + income  + hdi + (1 | location) , data=Finaldataset_MPH)
+# model3 <- lmer(log(death_pop) ~ 1 + popm + pop65 + year + income + hdi + year*income  + (1 + year | location) , data=Finaldataset_MPH)
+# 
+# summary(model1)
+# summary(model2)
+# summary(model3)
+
+
+# LMEM on not-scaled data: No transforming
+# model4 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi + (1 + year | location) , data=Finaldataset_MPH)
+# model5 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi + (1 | location) , data=Finaldataset_MPH)
+# model6 <- lmer(death_pop ~ 1 + popm + pop65 + year + income + hdi + year*income  + (1 + year | location) , data=Finaldataset_MPH)
+# 
+# summary(model4)
+# summary(model5)
+# summary(model6)
+
+
+# LMEM on scaled data
+# model7 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi + (1 + year | location) , data=Finaldataset_MPH2)
+# model8 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi + (1 | location) , data=Finaldataset_MPH2)
+# model9 <- lmer(death_pop ~ 1 + popm + pop65 + year + income + hdi + year*income  + (1 + year | location) , data=Finaldataset_MPH2)
+# 
+# summary(model7)
+# summary(model8)
+# summary(model9)
+
+# Trying to deal with convergence
+# Using optimizer
+# allFit(model4)
+# model4_2 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi +
+#                    (1 + year | location),
+#                  data=Finaldataset_MPH,
+#                  control = lmerControl(optimizer = "bobyqa"))
+# 
+# allFit(model7)
+# model7_2 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi +
+#                  (1 + year | location),
+#                data=Finaldataset_MPH2,
+               # control = lmerControl(optimizer = "Nelder_Mead"))
+
+# # Increasing the number of iterations
+# model4_3 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi +
+#                    (1 + year | location),
+#                  data=Finaldataset_MPH,
+#                  control = lmerControl(optCtr = list(maxfun = 1e9)))
+# 
+# model7_3 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi +
+#                    (1 + year | location),
+#                  data=Finaldataset_MPH2,
+#                  control = lmerControl(optCtr = list(maxfun = 1e9)))
+
+# Removing some of the derivative calculations
+model4_4 <- lmer(death_pop ~ 1 + popm + pop65 + income  + hdi +
+                   (1 + year | location),
+                 data=Finaldataset_MPH,
+                 control = lmerControl(calc.derivs = FALSE))
+
+# model7_4 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi +
+#                    (1 + year | location),
+#                  data=Finaldataset_MPH2,
+#                  control = lmerControl(calc.derivs = FALSE))
+
+# Assuming that random effects might be zero:
+# model4_5 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi +
+#                    (0 + year | location) + (1 | location),
+#                  data=Finaldataset_MPH,
+#                  control = lmerControl(calc.derivs = FALSE))
+# 
+# model7_5 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi +
+#                    (0 + year | location) + (1 | location),
+#                  data=Finaldataset_MPH2,
+#                  control = lmerControl(calc.derivs = FALSE))
+
+
+
+summary(model4_4)
+
+# Doing likelihood-ratio test:
+model4_4_2 <- lmer(death_pop ~ 1 + popm + pop65 + hdi +
+                                 (1 + year | location),
+                               data=Finaldataset_MPH,
+                               control = lmerControl(calc.derivs = FALSE))
+anova(model4_4_2, model4_4)
+
+
+model1_1 <- lmer(daly_pop ~ 1 + popm + pop65 + income  + hdi +
+                   (1 + year | location),
+                 data=Finaldataset_MPH,
+                 control = lmerControl(calc.derivs = FALSE))
+
+model1_1_2 <- lmer(daly_pop ~ 1 + popm + pop65 + hdi +
+                     (1 + year | location),
+                   data=Finaldataset_MPH,
+                   control = lmerControl(calc.derivs = FALSE))
+
+anova(model1_1_2, model1_1)
+
+summary(model1_1)
+
+
+# lht <- mixed(death_pop ~ 1 + popm + pop65 + year + income  + hdi +
+#                     (1 + year | location),
+#                   data=Finaldataset_MPH,
+#                   control = lmerControl(optimizer = "bobyqa"), method = 'LRT')
+# summary(lht)
+
+# Creating descriptive statistics
+desc1 <- CreateTableOne(data = Finaldataset_MPH, strata = "income",
+                        vars = c("death_pop", "popm", "pop65", "daly_pop"))
+desc1
+
+desc2 <- CreateTableOne(data = Finaldataset_MPH, strata = "year",
+                        vars = c("death_pop", "popm", "pop65", "daly_pop"))
+desc2
+
+Finaldataset_MPH$income <- as.factor(Finaldataset_MPH$income)
+levels(Finaldataset_MPH$income)
+
+Finaldataset_MPH$income <- factor(Finaldataset_MPH$income,
+                                  levels = c("Low-income countries",
+                                             "Lower-middle-income countries",
+                                             "Upper-middle-income countries",
+                                             "High-income countries"))
+
+mean_death_pop <- Finaldataset_MPH %>%
+  group_by(income) %>%
+  summarise(mean_death_pop = mean(death_pop, na.rm = TRUE))
+
+color_palette <- c("Low-income countries" = "#EF5350", 
+                   "Lower-middle-income countries" = "#FFA726", 
+                   "Upper-middle-income countries" = "#66BB6A", 
+                   "High-income countries" = "#2E7D32")
+
+plot2 <- ggplot(mean_death_pop, aes(x = income, y = mean_death_pop, fill = income)) +
+  geom_bar(stat = "identity") +
+  labs(title = NULL, x = NULL, y = "Mean death per 1 million population per year") +
+  theme_classic() +
+  scale_fill_manual(values = color_palette) +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(size = 12, color = "black"))
+plot2
+
+
+plot3 <- ggplot(Finaldataset_MPH, aes(x = year, y = (death_pop/191), fill = year)) +
+  geom_bar(stat = "identity") +
+  labs(title = NULL, x = NULL, y = "Mean death per 1 million population per each country") +
+  theme_classic() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"))
+plot3
+
+
+mean_daly_pop <- Finaldataset_MPH %>%
+  group_by(income) %>%
+  summarise(mean_daly_pop = mean(daly_pop, na.rm = TRUE))
+
+plot4 <- ggplot(mean_daly_pop, aes(x = income, y = mean_daly_pop, fill = income)) +
+  geom_bar(stat = "identity") +
+  labs(title = NULL, x = NULL, y = "Mean DALY per 1 million population per year") +
+  theme_classic() +
+  scale_fill_manual(values = color_palette) +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(size = 12, color = "black"))
+plot4
+
+
+plot5 <- ggplot(Finaldataset_MPH, aes(x = year, y = (daly_pop/191), fill = year)) +
+  geom_bar(stat = "identity") +
+  labs(title = NULL, x = NULL, y = "Mean DALY per 1 million population per each country") +
+  theme_classic() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"))
+plot5
+
+iran <- filter(Finaldataset_MPH, location == "iran, islamic rep.")
+
+last <- filter(Finaldataset_MPH, year == 2019)
+
+last$income_2 <- ifelse(last$income == "Low-income countries", 1,
+                        ifelse(last$income == "Lower-middle-income countries", 2,
+                               ifelse(last$income == "Upper-middle-income countries", 3, 4)))
+last$income_2 <- as.numeric(last$income_2)
+
+
+last_daly <- last[ , c(4 , 6  ,9 , 13, 12)]
+last_death <- last[ , c(4 , 6  ,9 , 13, 11)]
+
+last_death <- na.omit(last_death)
+last_daly <- na.omit(last_daly)
+
+
+library(ppcor)
+
+death_cor <- pcor(last_death, method = "spearman")
+death_cor
+
+daly_cor <- pcor(last_daly, method = "spearman")
+daly_cor
+
+
+plot6 <- ggplot(iran, aes(x = year, y = (death_pop), fill = year)) +
+  geom_bar(stat = "identity") +
+  labs(title = NULL, x = NULL, y = "Mean death per 1 million population in Iran") +
+  theme_classic() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"))
+plot6
+
+plot7 <- ggplot(iran, aes(x = year, y = (daly_pop), fill = year)) +
+  geom_bar(stat = "identity") +
+  labs(title = NULL, x = NULL, y = "Mean DALY per 1 million population in Iran") +
+  theme_classic() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"))
+plot7
+
+
+plot8 <- ggplot(Finaldataset_MPH, aes(x = year, y = death_pop, color = income)) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = income), alpha = 0.2) +
+  labs(title = "Mean Deaths per Million by Year and Income Classification",
+       x = "Year",
+       y = "Mean Deaths per Million",
+       color = "Income Classification",
+       fill = "Income Classification") +
+  theme_classic(base_size = 15) +
+  scale_color_manual(values = c("Low-income countries" = "#EF5350", 
+                                "Lower-middle-income countries" = "#FFA726", 
+                                "Upper-middle-income countries" = "#66BB6A", 
+                                "High-income countries" = "#2E7D32")) +
+  scale_fill_manual(values = c("Low-income countries" = "#EF5350", 
+                               "Lower-middle-income countries" = "#FFA726", 
+                               "Upper-middle-income countries" = "#66BB6A", 
+                               "High-income countries" = "#2E7D32")) +
+  theme(legend.position = "right",
+        legend.title.align = 0.5,
+        plot.title = element_text(hjust = 0.5),
+        panel.grid.major.y = element_line(size = 0.5, linetype='dashed', color="grey"),
+        panel.grid.minor.y = element_blank()) +
+  guides(shape=guide_legend(override.aes=list(size=4))) 
+
+plot8
+
+
+plot9 <- ggplot(Finaldataset_MPH, aes(x = year, y = daly_pop, color = income)) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = income), alpha = 0.2) +
+  labs(title = "Mean DALY per Million by Year and Income Classification",
+       x = "Year",
+       y = "Mean DALY per Million",
+       color = "Income Classification",
+       fill = "Income Classification") +
+  theme_classic(base_size = 15) +
+  scale_color_manual(values = c("Low-income countries" = "#EF5350", 
+                                "Lower-middle-income countries" = "#FFA726", 
+                                "Upper-middle-income countries" = "#66BB6A", 
+                                "High-income countries" = "#2E7D32")) +
+  scale_fill_manual(values = c("Low-income countries" = "#EF5350", 
+                               "Lower-middle-income countries" = "#FFA726", 
+                               "Upper-middle-income countries" = "#66BB6A", 
+                               "High-income countries" = "#2E7D32")) +
+  theme(legend.position = "right",
+        legend.title.align = 0.5,
+        plot.title = element_text(hjust = 0.5),
+        panel.grid.major.y = element_line(size = 0.5, linetype='dashed', color="grey"),
+        panel.grid.minor.y = element_blank()) +
+  guides(shape=guide_legend(override.aes=list(size=4))) 
+
+plot9
+
+
+
+
+# Creating world map
+world_map <- map_data("world")
+world_map$region <- tolower(world_map$region)
+
+# Changing some country names:
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "yemen", "yemen, rep.", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "vietnam", "viet nam", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "venezuela", "venezuela, rb", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "saint vincent", "st. vincent and the grenadines", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "grenadines", "st. vincent and the grenadines", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "usa", "united states", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "turkey", "turkiye", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "trinidad", "trinidad and tobago", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "syria", "syrian arab republic", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "slovakia", "slovak republic", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "russia", "russian federation", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "palestine", "west bank and gaza", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "saint lucia", "st. lucia", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "south korea", "korea, rep.", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "saint kitts", "st. kitts and nevis", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "kyrgyzstan", "kyrgyz republic", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "iran", "iran, islamic rep.", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "gambia", "gambia, the", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "uk", "united kingdom", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "micronesia", "micronesia, fed. sts.", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "egypt", "egypt, arab rep.", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "czech republic", "czechia", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "republic of congo", "congo, rep.", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "democratic republic of the congo", "congo, dem. rep.", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "ivory coast", "cote d'ivoire", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "brunei", "brunei darussalam", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "bahamas", "bahamas, the", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "bahamas", "bahamas, the", region))
+
+
+mean_death_pop_count <- Finaldataset_MPH %>%
+  group_by(location) %>%
+  summarise(mean_death_pop = mean(death_pop, na.rm = TRUE))
+
+mean_daly_pop_count <- Finaldataset_MPH %>%
+  group_by(location) %>%
+  summarise(mean_daly_pop = mean(daly_pop, na.rm = TRUE))
+
+
+plot10_data_death <- left_join(world_map, mean_death_pop_count, by = c("region" = "location"))
+plot10_data_daly <- left_join(world_map, mean_daly_pop_count, by = c("region" = "location"))
+
+
+plot10 <- ggplot(data = plot10_data_death) + 
+  geom_polygon(aes(x = long, y = lat, group = group, fill = mean_death_pop), color = "white") +
+  scale_fill_gradient(low = "#fee5d9", high = "#a50f15", na.value = "grey50",
+                      name = "Mean Deaths per Million") +
+  theme_void() +
+  labs(title = "World Map of Mean Deaths per Million per Year") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.position = "right",
+        legend.title.align = 0.5)
+
+plot10
+
+plot11 <- ggplot(data = plot10_data_daly) + 
+  geom_polygon(aes(x = long, y = lat, group = group, fill = mean_daly_pop), color = "white") +
+  scale_fill_gradient(low = "#fee5d9", high = "#a50f15", na.value = "grey50",
+                      name = "Mean DALY per Million") +
+  theme_void() +
+  labs(title = "World Map of Mean DALY per Million per Year") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.position = "right",
+        legend.title.align = 0.5)
+
+plot11
+
+
+# Extracting random effects
+ranef_4 <- ranef(model4_4)
+ranef_4 <- as.data.frame(ranef_4$location)
+ranef_4$location <- row.names(ranef_4)
+
+
+random_effect <- left_join(world_map, ranef_4, by = c("region" = "location"))
+
+
+plot12 <- ggplot(data = random_effect) + 
+  geom_polygon(aes(x = long, y = lat, group = group, fill = year), color = "white") +
+  scale_fill_gradient(low = "#fee5d9", high = "#a50f15", na.value = "grey50",
+                      name = "Random effect estimates") +
+  theme_void() +
+  labs(title = "Random effect estimates of year for each country (Death)") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.position = "right",
+        legend.title.align = 0.5)
+
+plot12
+
+
+ranef_1 <- ranef(model1_1)
+ranef_1 <- as.data.frame(ranef_1$location)
+ranef_1$location <- row.names(ranef_1)
+
+
+random_effect_1 <- left_join(world_map, ranef_1, by = c("region" = "location"))
+
+
+plot13 <- ggplot(data = random_effect_1) + 
+  geom_polygon(aes(x = long, y = lat, group = group, fill = year), color = "white") +
+  scale_fill_gradient(low = "#fee5d9", high = "#a50f15", na.value = "grey50",
+                      name = "Random effect estimates") +
+  theme_void() +
+  labs(title = "Random effect estimates of year for each country (DALY)") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.position = "right",
+        legend.title.align = 0.5)
+
+plot13
+
+
