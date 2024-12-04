@@ -1,0 +1,353 @@
+# Importing datasets and cleaning
+library(readxl)
+library(tidyverse)
+library(ppcor)
+library(tableone)
+library(gridExtra)
+status <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/status.csv")
+status <- subset(status, PATNO < 10000)
+status <- subset(status, COHORT_DEFINITION != "SWEDD")
+status <- status[ , c(1 , 3)]
+
+
+age <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/age.csv")
+age <- subset(age, PATNO < 10000)
+age <- subset(age, EVENT_ID %in% c("BL", "SC", "V10"))
+# A few codes for determing which of theses visits "BL" or "SC" should remain.
+# Find participants with "BL"
+participants_with_BL <- unique(age$PATNO[age$EVENT_ID == "BL"])
+
+# Find participants with "SC"
+participants_with_SC <- unique(age$PATNO[age$EVENT_ID == "SC"])
+
+# Check for participants who have "BL" but not "SC"
+participants_BL_not_SC <- setdiff(participants_with_BL, participants_with_SC)
+
+# Check for participants who have "SC" but not "BL"
+participants_SC_not_BL <- setdiff(participants_with_SC, participants_with_BL)
+
+# Output results
+if (length(participants_BL_not_SC) > 0) {
+  cat("Participants with 'BL' but not 'SC':", participants_BL_not_SC, "\n")
+} else {
+  cat("No participants with 'BL' but not 'SC'.\n")
+}
+
+if (length(participants_SC_not_BL) > 0) {
+  cat("Participants with 'SC' but not 'BL':", participants_SC_not_BL, "\n")
+} else {
+  cat("No participants with 'SC' but not 'BL'.\n")
+}
+age <- subset(age, EVENT_ID != "BL")
+
+
+demo <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/demo.csv")
+demo <- subset(demo, PATNO < 10000)
+demo <- demo[ , c(2 , 10 , 19)]
+
+
+ses <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/ses.csv")
+ses <- subset(ses, EVENT_ID == "SC")
+ses <- subset(ses, PATNO < 10000)
+ses <- ses[ , c(2 , 6)]
+
+
+moca <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/moca.csv")
+moca <- subset(moca, PATNO < 10000)
+moca <- subset(moca, EVENT_ID %in% c("BL", "SC", "V10"))
+moca <- moca[ , c(2 , 3 , 33)]
+
+
+dat <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/dat.csv")
+dat <- subset(dat, PATNO < 10000)
+dat <- subset(dat, EVENT_ID %in% c("BL", "SC", "V10"))
+dat <- dat[ , c(2 , 3 , 6 , 7 , 8 , 9 , 10 , 11)]
+
+sem <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/sem.csv")
+sem <- subset(sem, PATNO < 10000)
+sem <- subset(sem, EVENT_ID %in% c("BL", "SC", "V10"))
+sem <- sem[ , c(2 , 3 , 6 , 7 , 8)]
+sem$EVENT_ID <- gsub("BL", "SC", sem$EVENT_ID)
+sem$fluency <- rowSums(sem[ , 3:5])
+            
+
+
+# Merging data:
+final <- merge(age, status, by = "PATNO", all = TRUE)
+final <- merge(final, ses, by = "PATNO", all = TRUE)
+final <- merge(final, demo, by = "PATNO", all = TRUE)
+final <- merge(final, dat, by = c("PATNO", "EVENT_ID"), all = TRUE)
+final <- merge(final, sem, by = c("PATNO", "EVENT_ID"), all = TRUE)
+
+# Removing duplicates
+library(dplyr)
+final <- distinct(final)
+final2 <- na.omit(final)
+
+
+final2_SC <- subset(final2, EVENT_ID == "SC")
+final2_Y4 <- subset(final2, EVENT_ID == "V10")
+
+final2_SC_HC <- subset(final2_SC, COHORT_DEFINITION == "Healthy Control")
+final2_Y4_HC <- subset(final2_Y4, COHORT_DEFINITION == "Healthy Control")
+final2_SC_PD <- subset(final2_SC, COHORT_DEFINITION == "Parkinson's Disease")
+final2_Y4_PD <- subset(final2_Y4, COHORT_DEFINITION == "Parkinson's Disease")
+
+# Now the dataset is ready!
+
+# Screening: Parkinsons's Disease
+# Right caudate * (No)
+cor_SC_anim_rc_pd <- cor.test(final2_SC_PD$fluency, final2_SC_PD$DATSCAN_CAUDATE_R, method = "kendall")
+cor_SC_anim_rc_pd
+
+# Left caudate
+cor_SC_anim_lc_pd <- cor.test(final2_SC_PD$fluency, final2_SC_PD$DATSCAN_CAUDATE_L, method = "kendall")
+cor_SC_anim_lc_pd
+
+# Right putamen
+cor_SC_anim_rp_pd <- cor.test(final2_SC_PD$fluency, final2_SC_PD$DATSCAN_PUTAMEN_R, method = "kendall")
+cor_SC_anim_rp_pd
+
+# Left putamen
+cor_SC_anim_lp_pd <- cor.test(final2_SC_PD$fluency, final2_SC_PD$DATSCAN_PUTAMEN_L, method = "kendall")
+cor_SC_anim_lp_pd
+
+# Right anterior putamen * (No)
+cor_SC_anim_rap_pd <- cor.test(final2_SC_PD$fluency, final2_SC_PD$DATSCAN_PUTAMEN_R_ANT, method = "kendall")
+cor_SC_anim_rap_pd
+
+# Left anterior putamen
+cor_SC_anim_lap_pd <- cor.test(final2_SC_PD$fluency, final2_SC_PD$DATSCAN_PUTAMEN_L_ANT, method = "kendall")
+cor_SC_anim_lap_pd
+
+
+
+# Screening: Healthy Control
+# Right caudate
+cor_SC_anim_rc_hc <- cor.test(final2_SC_HC$fluency, final2_SC_HC$DATSCAN_CAUDATE_R, method = "kendall")
+cor_SC_anim_rc_hc
+
+# Left caudate * (No)
+cor_SC_anim_lc_hc <- cor.test(final2_SC_HC$fluency, final2_SC_HC$DATSCAN_CAUDATE_L, method = "kendall")
+cor_SC_anim_lc_hc
+
+# Right putamen * (No)
+cor_SC_anim_rp_hc <- cor.test(final2_SC_HC$fluency, final2_SC_HC$DATSCAN_PUTAMEN_R, method = "kendall")
+cor_SC_anim_rp_hc
+
+# Left putamen
+cor_SC_anim_lp_hc <- cor.test(final2_SC_HC$fluency, final2_SC_HC$DATSCAN_PUTAMEN_L, method = "kendall")
+cor_SC_anim_lp_hc
+
+# Right anterior putamen
+cor_SC_anim_rap_hc <- cor.test(final2_SC_HC$fluency, final2_SC_HC$DATSCAN_PUTAMEN_R_ANT, method = "kendall")
+cor_SC_anim_rap_hc
+
+# Left anterior putamen
+cor_SC_anim_lap_hc <- cor.test(final2_SC_HC$fluency, final2_SC_HC$DATSCAN_PUTAMEN_L_ANT, method = "kendall")
+cor_SC_anim_lap_hc
+
+
+
+# 4th year: Parkinsons's Disease
+# Right caudate * (No)
+cor_Y4_anim_rc_pd <- cor.test(final2_Y4_PD$fluency, final2_Y4_PD$DATSCAN_CAUDATE_R, method = "kendall")
+cor_Y4_anim_rc_pd
+
+# Left caudate * (No)
+cor_Y4_anim_lc_pd <- cor.test(final2_Y4_PD$fluency, final2_Y4_PD$DATSCAN_CAUDATE_L, method = "kendall")
+cor_Y4_anim_lc_pd
+
+# Right putamen * (Yes!)
+cor_Y4_anim_rp_pd <- cor.test(final2_Y4_PD$fluency, final2_Y4_PD$DATSCAN_PUTAMEN_R, method = "kendall")
+cor_Y4_anim_rp_pd
+
+# Left putamen * (Yes!)
+cor_Y4_anim_lp_pd <- cor.test(final2_Y4_PD$fluency, final2_Y4_PD$DATSCAN_PUTAMEN_L, method = "kendall")
+cor_Y4_anim_lp_pd
+
+# Right anterior putamen * (Yes!) 
+cor_Y4_anim_rap_pd <- cor.test(final2_Y4_PD$fluency, final2_Y4_PD$DATSCAN_PUTAMEN_R_ANT, method = "kendall")
+cor_Y4_anim_rap_pd
+
+# Left anterior putamen * (No) 
+cor_Y4_anim_lap_pd <- cor.test(final2_Y4_PD$fluency, final2_Y4_PD$DATSCAN_PUTAMEN_L_ANT, method = "kendall")
+cor_Y4_anim_lap_pd
+
+
+# final2_SC_PD_red <- final2_SC_PD[ , c(3, 5, 6, 7, 17, 8)]
+# final2_SC_HC_red <- final2_SC_HC[ , c(3, 5, 6, 7, 17, 10)]
+final2_Y4_PD_red <- final2_Y4_PD[ , c(3, 5, 6, 7, 13, 17)]
+
+# pc1 <- pcor(final2_SC_PD_red, method = "kendall")
+# pc1
+# 
+# pc2 <- pcor(final2_SC_HC_red, method = "kendall")
+# pc2
+
+pc3 <- pcor(final2_Y4_PD_red, method = "kendall")
+pc3
+
+final2_SC$SEX <- as.factor(final2_SC$SEX)
+final2_Y4$SEX <- as.factor(final2_Y4$SEX)
+
+final2_SC$HANDED <- as.factor(final2_SC$HANDED)
+final2_Y4$HANDED <- as.factor(final2_Y4$HANDED)
+
+
+table_SC <- CreateTableOne(data = final2_SC, strata = "COHORT_DEFINITION")
+table_SC
+
+table_Y4 <- CreateTableOne(data = final2_Y4, strata = "COHORT_DEFINITION")
+table_Y4
+
+
+plot1 <- ggplot(final2_Y4_PD, aes(x = DATSCAN_CAUDATE_R, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 0.5) + # Use shape and fill for points
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
+  labs(title = "Right caudate",
+       x = "Right caudate dopaminergic function",
+       y = "Semantic fluency") +
+  theme_classic() + # Classic theme
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"), # Center and style the title
+    axis.title.x = element_text(size = 8, face = "bold"), # Style x-axis title
+    axis.title.y = element_text(size = 8, face = "bold"), # Style y-axis title
+    axis.text.x = element_text(size = 10), # Style x-axis text
+    axis.text.y = element_text(size = 10), # Style y-axis text
+    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
+    panel.grid.minor = element_blank() # Remove minor grid lines
+  ) + 
+  annotate("text", x = max(final2_Y4_PD$DATSCAN_CAUDATE_R) * 0.685, y = max(final2_Y4_PD$fluency) * 0.85,
+           label = paste("Kendall's tau:", "0.075", "\np-value:", "0.588"),
+           size = 4.5, hjust=0)
+
+plot1
+
+
+
+plot2 <- ggplot(final2_Y4_PD, aes(x = DATSCAN_CAUDATE_L, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 0.5) + # Use shape and fill for points
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
+  labs(title = "Left caudate",
+       x = "Left caudate dopaminergic function",
+       y = "Semantic fluency") +
+  theme_classic() + # Classic theme
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"), # Center and style the title
+    axis.title.x = element_text(size = 8, face = "bold"), # Style x-axis title
+    axis.title.y = element_text(size = 8, face = "bold"), # Style y-axis title
+    axis.text.x = element_text(size = 10), # Style x-axis text
+    axis.text.y = element_text(size = 10), # Style y-axis text
+    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
+    panel.grid.minor = element_blank() # Remove minor grid lines
+  ) + 
+  annotate("text", x = max(final2_Y4_PD$DATSCAN_CAUDATE_L) * 0.65, y = max(final2_Y4_PD$fluency) * 0.85,
+           label = paste("Kendall's tau:", "0.076", "\np-value:", "0.553"),
+           size = 4.5, hjust=0)
+
+plot2
+
+
+
+plot3 <- ggplot(final2_Y4_PD, aes(x = DATSCAN_PUTAMEN_R, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 0.5) + # Use shape and fill for points
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
+  labs(title = "Right putamen",
+       x = "Right putamen dopaminergic function",
+       y = "Semantic fluency") +
+  theme_classic() + # Classic theme
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"), # Center and style the title
+    axis.title.x = element_text(size = 8, face = "bold"), # Style x-axis title
+    axis.title.y = element_text(size = 8, face = "bold"), # Style y-axis title
+    axis.text.x = element_text(size = 10), # Style x-axis text
+    axis.text.y = element_text(size = 10), # Style y-axis text
+    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
+    panel.grid.minor = element_blank() # Remove minor grid lines
+  ) + 
+  annotate("text", x = max(final2_Y4_PD$DATSCAN_PUTAMEN_R) * 0.65, y = max(final2_Y4_PD$fluency) * 0.85,
+           label = paste("Kendall's tau:", "0.117", "\np-value:", "0.003"),
+           size = 4.5, hjust=0)
+
+plot3
+
+
+plot4 <- ggplot(final2_Y4_PD, aes(x = DATSCAN_PUTAMEN_L, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 0.5) + # Use shape and fill for points
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
+  labs(title = "Left putamen",
+       x = "Left putamen dopaminergic function",
+       y = "Semantic fluency") +
+  theme_classic() + # Classic theme
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"), # Center and style the title
+    axis.title.x = element_text(size = 8, face = "bold"), # Style x-axis title
+    axis.title.y = element_text(size = 8, face = "bold"), # Style y-axis title
+    axis.text.x = element_text(size = 10), # Style x-axis text
+    axis.text.y = element_text(size = 10), # Style y-axis text
+    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
+    panel.grid.minor = element_blank() # Remove minor grid lines
+  ) + 
+  annotate("text", x = max(final2_Y4_PD$DATSCAN_PUTAMEN_L) * 0.65, y = max(final2_Y4_PD$fluency) * 0.85,
+           label = paste("Kendall's tau:", "0.084", "\np-value:", "0.033"),
+           size = 4.5, hjust=0)
+
+plot4
+
+
+
+
+plot5 <- ggplot(final2_Y4_PD, aes(x = DATSCAN_PUTAMEN_R_ANT, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 0.5) + # Use shape and fill for points
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
+  labs(title = "Right anterior putamen",
+       x = "Right putamen dopaminergic function",
+       y = "Semantic fluency") +
+  theme_classic() + # Classic theme
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"), # Center and style the title
+    axis.title.x = element_text(size = 8, face = "bold"), # Style x-axis title
+    axis.title.y = element_text(size = 8, face = "bold"), # Style y-axis title
+    axis.text.x = element_text(size = 10), # Style x-axis text
+    axis.text.y = element_text(size = 10), # Style y-axis text
+    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
+    panel.grid.minor = element_blank() # Remove minor grid lines
+  ) + 
+  annotate("text", x = max(final2_Y4_PD$DATSCAN_PUTAMEN_R_ANT) * 0.65, y = max(final2_Y4_PD$fluency) * 0.85,
+           label = paste("Kendall's tau:", "0.108", "\np-value:", "0.006"),
+           size = 4.5, hjust=0)
+
+plot5
+
+
+plot6 <- ggplot(final2_Y4_PD, aes(x = DATSCAN_PUTAMEN_L_ANT, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 0.5) + # Use shape and fill for points
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
+  labs(title = "Left anterior putamen",
+       x = "Left anterior putamen dopaminergic function",
+       y = "Semantic fluency") +
+  theme_classic() + # Classic theme
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"), # Center and style the title
+    axis.title.x = element_text(size = 8, face = "bold"), # Style x-axis title
+    axis.title.y = element_text(size = 8, face = "bold"), # Style y-axis title
+    axis.text.x = element_text(size = 10), # Style x-axis text
+    axis.text.y = element_text(size = 10), # Style y-axis text
+    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
+    panel.grid.minor = element_blank() # Remove minor grid lines
+  ) + 
+  annotate("text", x = max(final2_Y4_PD$DATSCAN_PUTAMEN_L_ANT) * 0.65, y = max(final2_Y4_PD$fluency) * 0.85,
+           label = paste("Kendall's tau:", "0.069", "\np-value:", "0.079"),
+           size = 4.5, hjust=0)
+
+plot6
+
+
+plot7 <- grid.arrange(plot1, plot3, plot5, plot2, plot4, plot6, nrow=2)
