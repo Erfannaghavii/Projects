@@ -1,0 +1,349 @@
+# Importing datasets and cleaning
+library(readxl)
+library(tidyverse)
+library(ppcor)
+library(tableone)
+status <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/status.csv")
+status <- subset(status, PATNO < 10000)
+status <- subset(status, COHORT_DEFINITION != "SWEDD")
+status <- status[ , c(1 , 3)]
+
+
+age <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/age.csv")
+age <- subset(age, PATNO < 10000)
+age <- subset(age, EVENT_ID %in% c("BL", "SC", "V10"))
+# A few codes for determing which of theses visits "BL" or "SC" should remain.
+# Find participants with "BL"
+participants_with_BL <- unique(age$PATNO[age$EVENT_ID == "BL"])
+
+# Find participants with "SC"
+participants_with_SC <- unique(age$PATNO[age$EVENT_ID == "SC"])
+
+# Check for participants who have "BL" but not "SC"
+participants_BL_not_SC <- setdiff(participants_with_BL, participants_with_SC)
+
+# Check for participants who have "SC" but not "BL"
+participants_SC_not_BL <- setdiff(participants_with_SC, participants_with_BL)
+
+# Output results
+if (length(participants_BL_not_SC) > 0) {
+  cat("Participants with 'BL' but not 'SC':", participants_BL_not_SC, "\n")
+} else {
+  cat("No participants with 'BL' but not 'SC'.\n")
+}
+
+if (length(participants_SC_not_BL) > 0) {
+  cat("Participants with 'SC' but not 'BL':", participants_SC_not_BL, "\n")
+} else {
+  cat("No participants with 'SC' but not 'BL'.\n")
+}
+age <- subset(age, EVENT_ID != "BL")
+
+
+demo <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/demo.csv")
+demo <- subset(demo, PATNO < 10000)
+demo <- demo[ , c(2 , 10 , 19)]
+
+
+ses <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/ses.csv")
+ses <- subset(ses, EVENT_ID == "SC")
+ses <- subset(ses, PATNO < 10000)
+ses <- ses[ , c(2 , 6)]
+
+
+ess <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/ess.csv")
+ess <- subset(ess, PATNO < 10000)
+ess <- subset(ess, EVENT_ID %in% c("BL", "SC", "V10"))
+ess$esstotal <- rowSums(ess[, 7:14])
+ess$EVENT_ID <- gsub("BL", "SC", ess$EVENT_ID)
+ess <- ess[ , c(2 , 3 , 17)]
+
+
+rbd <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/rbd.csv")
+rbd <- subset(rbd, PATNO < 10000)
+rbd <- subset(rbd, EVENT_ID %in% c("BL", "SC", "V10"))
+rbd$q10 <- rowSums(rbd[, 19:27])
+rbd$q11 <- ifelse(rbd$q10 == 0, 0 , 1)
+rbd$rbdtotal <- rowSums(rbd[, c(7:18 , 31)])
+rbd$EVENT_ID <- gsub("BL", "SC", rbd$EVENT_ID)
+rbd <- rbd[ , c(2 , 3 , 32)]
+
+
+moca <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/moca.csv")
+moca <- subset(moca, PATNO < 10000)
+moca <- subset(moca, EVENT_ID %in% c("BL", "SC", "V10"))
+moca <- moca[ , c(2 , 3 , 33)]
+
+
+# grey <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/grey.csv")
+# grey <- subset(grey, PATNO < 10000)
+# grey <- subset(grey, EVENT_ID %in% c("BL", "SC", "V10"))
+# grey <- grey[ , c(1 , 2 , 5)]
+# grey$EVENT_ID[grey$EVENT_ID == "BL"] <- "SC"
+
+
+# dat <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/dat.csv")
+# dat <- subset(dat, PATNO < 10000)
+# dat <- subset(dat, EVENT_ID %in% c("BL", "SC", "V10"))
+# dat <- dat[ , c(2 , 3 , 6 , 7 , 8 , 9 , 10 , 11)]
+
+
+scopa <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/scopa.csv")
+scopa <- subset(scopa, PATNO < 10000)
+scopa <- subset(scopa, EVENT_ID %in% c("BL", "SC", "V10"))
+scopa[scopa == 9] <- NA
+scopa$scopa23 <- rowSums(scopa[, c(28, 29 , 32 , 33)], na.rm = TRUE)
+scopa$scopatotal <- rowSums(scopa[, c(7:27 , 44)])
+scopa$EVENT_ID <- gsub("BL", "SC", scopa$EVENT_ID)
+scopa <- scopa[ , c(2 , 3 , 45)]
+
+
+# mds1 <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/mds1.csv")
+# mds1 <- subset(mds1, PATNO < 10000)
+# mds1 <- subset(mds1, EVENT_ID %in% c("SC", "V10"))
+# mds1 <- mds1[ , c(2 , 3 , 13)]
+# 
+# mds2 <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/mds2.csv")
+# mds2 <- subset(mds2, PATNO < 10000)
+# mds2 <- subset(mds2, EVENT_ID %in% c("SC", "V10"))
+# mds2 <- mds2[ , c(2 , 3 , 20)]
+# 
+# mds3 <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/mds3.csv")
+# mds3 <- subset(mds3, PATNO < 10000)
+# mds3 <- subset(mds3, PDSTATE != "ON")
+# mds3 <- subset(mds3, EVENT_ID %in% c("SC", "V10"))
+# mds3 <- mds3[ , c(2 , 3 , 57)]
+# 
+gds <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/gds.csv")
+gds <- subset(gds, PATNO < 10000)
+gds$gdstotal <- rowSums(gds[, 6:20])
+gds <- subset(gds, EVENT_ID %in% c("BL", "SC", "V10"))
+gds$EVENT_ID <- gsub("BL", "SC", gds$EVENT_ID)
+gds <- gds[ , c(2 , 3 , 23)]
+
+bio <- read.csv("C:/Users/mehdi/Desktop/Projects/27 - Inflammation and PD/Datasets/bio.csv")
+bio <- subset(bio, PATNO < 10000)
+bio <- subset(bio, EVENT_ID %in% c("BL", "SC", "V10"))
+bio <- bio[ , c(1 , 2 , 13 , 14 , 19)]
+bio <- subset(bio, !(LTSTNAME %in% c("ALT (SGPT)", 
+                                     "APTT-QT", 
+                                     "AST (SGOT)", 
+                                     "Albumin-QT", 
+                                     "Alkaline Phosphatase-QT", 
+                                     "Basophils", 
+                                     "Basophils (%)", 
+                                     "Calcium (EDTA)", 
+                                     "Creatinine (Rate Blanked)", 
+                                     "Eosinophils", 
+                                     "Eosinophils (%)", 
+                                     "Hematocrit", 
+                                     "Hemoglobin",
+                                     "Lymphocytes (%)", 
+                                     "Monocytes (%)", 
+                                     "Neutrophils (%)", 
+                                     "Platelets", 
+                                     "Prothrombin Time", 
+                                     "RBC", 
+                                     "RBC Morphology", 
+                                     "Serum Bicarbonate", 
+                                     "Serum Chloride",
+                                     "Serum Potassium",
+                                     "Serum Glucose",
+                                     "Serum Sodium", 
+                                     "Serum Uric Acid", 
+                                     "Total Bilirubin", 
+                                     "Total Protein", 
+                                     "Urea Nitrogen", 
+                                     "WBC")))
+unique(bio$LUSRES)
+bio <- subset(bio, LUSRES != "")
+bio <- subset(bio, LUSRES != "Unscheduled")
+bio <- subset(bio, LUSRES != "Repeat")
+bio <- subset(bio, LUSRES != "Not ident. w/i")
+bio <- subset(bio, LUSRES != "Smudge cells")
+bio <- subset(bio, LUSRES != "Borderline")
+bio <- subset(bio, LUSRES != "Negative")
+bio <- subset(bio, LUSRES != "Dohle bodies p")
+bio <- subset(bio, LUSRES != "Yes")
+
+bio <- bio %>%
+  pivot_wider(
+    names_from = LTSTNAME,
+    values_from = LUSRES
+  )
+bio <- bio[ , c(1 , 2 , 4 , 5 , 6)]
+a <- numeric(nrow(bio))
+b <- numeric(nrow(bio))
+c <- numeric(nrow(bio))
+for (i in 1:nrow(bio)) {
+  a[i] <- as.numeric(bio$Neutrophils[i])
+  b[i] <- as.numeric(bio$Lymphocytes[i])
+  c[i] <- as.numeric(bio$Monocytes[i])
+  bio$nlr[i] <- a[i]/b[i]
+  bio$lmr[i] <- b[i]/c[i]
+}
+
+
+# Merging data:
+final <- merge(age, status, by = "PATNO", all = TRUE)
+final <- merge(final, ses, by = "PATNO", all = TRUE)
+final <- merge(final, demo, by = "PATNO", all = TRUE)
+final <- merge(final, ess, by = c("PATNO", "EVENT_ID"), all = TRUE)
+final <- merge(final, rbd, by = c("PATNO", "EVENT_ID"), all = TRUE)
+final <- merge(final, moca, by = c("PATNO", "EVENT_ID"), all = TRUE)
+# final <- merge(final, mds1, by = c("PATNO", "EVENT_ID"), all = TRUE)
+# final <- merge(final, mds2, by = c("PATNO", "EVENT_ID"), all = TRUE)
+# final <- merge(final, mds3, by = c("PATNO", "EVENT_ID"), all = TRUE)
+final <- merge(final, gds, by = c("PATNO", "EVENT_ID"), all = TRUE)
+final <- merge(final, scopa, by = c("PATNO", "EVENT_ID"), all = TRUE)
+final <- merge(final, bio, by = c("PATNO", "EVENT_ID"))
+# final <- merge(final, grey, by = c("PATNO", "EVENT_ID"))
+# final <- merge(final, dat, by = c("PATNO", "EVENT_ID"), all = TRUE)
+
+# Removing duplicates
+library(dplyr)
+final <- distinct(final)
+
+# final <- subset(final, COHORT_DEFINITION == "Healthy Control")
+final <- na.omit(final)
+final <- subset(final, Neutrophils != 6.66)
+final <- subset(final, Neutrophils != 7.33)
+final <- subset(final, Neutrophils != 5.53)
+
+# # Ensuring the the participants must have 2 follow-ups:
+# final2 <- final %>%
+#   group_by(PATNO) %>%
+#   filter(all(c("SC", "V10") %in% EVENT_ID)) %>%
+#   ungroup()
+
+final2 <-final[ , -c(13:15)]
+
+
+final2_SC <- subset(final2, EVENT_ID == "SC")
+final2_Y4 <- subset(final2, EVENT_ID == "V10")
+
+final2_SC_HC <- subset(final2_SC, COHORT_DEFINITION == "Healthy Control")
+final2_Y4_HC <- subset(final2_Y4, COHORT_DEFINITION == "Healthy Control")
+final2_SC_PD <- subset(final2_SC, COHORT_DEFINITION == "Parkinson's Disease")
+final2_Y4_PD <- subset(final2_Y4, COHORT_DEFINITION == "Parkinson's Disease")
+
+# Now the dataset is ready!
+
+# Screening: Parkinsons's Disease
+# NLR and MoCA
+cor_SC_nlr_moca <- cor.test(final2_SC_PD$nlr, final2_SC_PD$MCATOT, method = "kendall")
+cor_SC_nlr_moca
+
+# LMR and MoCA 
+cor_SC_lmr_moca <- cor.test(final2_SC_PD$lmr, final2_SC_PD$MCATOT, method = "kendall")
+cor_SC_lmr_moca
+
+
+
+# 4th year: Parkinson's Disease
+# NLR and MoCA *
+cor_Y4_nlr_moca <- cor.test(final2_Y4_PD$nlr, final2_Y4_PD$MCATOT, method = "kendall")
+cor_Y4_nlr_moca
+
+# LMR and MoCA *
+cor_Y4_lmr_moca <- cor.test(final2_Y4_PD$lmr, final2_Y4_PD$MCATOT, method = "kendall")
+cor_Y4_lmr_moca
+
+
+final2_Y4_PD_red_nlr <- final2_Y4_PD[ , c(3, 5:7, 10, 13)]
+final2_Y4_PD_red_lmr <- final2_Y4_PD[ , c(3, 5:7, 10, 14)]
+
+
+# pc1 <- pcor(final2_Y4_red_nlr, method = "spearman")
+# pc2 <- pcor(final2_Y4_red_lmr, method = "spearman")
+pc3 <- pcor(final2_Y4_PD_red_nlr, method = "kendall")
+pc4 <- pcor(final2_Y4_PD_red_lmr, method = "kendall")
+
+# pc1
+# pc2
+pc3
+pc4
+
+
+# So, NLR is associated with reduced cognition in Parkinson's Disease.
+
+final2_SC$SEX <- as.factor(final2_SC$SEX)
+final2_Y4$SEX <- as.factor(final2_Y4$SEX)
+
+final2_SC$HANDED <- as.factor(final2_SC$HANDED)
+final2_Y4$HANDED <- as.factor(final2_Y4$HANDED)
+
+
+table_SC <- CreateTableOne(data = final2_SC, strata = "COHORT_DEFINITION")
+table_SC
+
+table_Y4 <- CreateTableOne(data = final2_Y4, strata = "COHORT_DEFINITION")
+table_Y4
+
+
+# Create the scatterplot with enhanced aesthetics
+plot1 <- ggplot(final2_Y4, aes(x = nlr, y = MCATOT)) +
+  geom_point(size = 2, shape = 21, fill = "#36855F", color = "black", alpha = 0.7) + # Use shape and fill for points
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
+  labs(title = "The association between NLR and cognition",
+       x = "NLR",
+       y = "MoCA") +
+  theme_classic() + # Classic theme
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"), # Center and style the title
+    axis.title.x = element_text(size = 14, face = "bold"), # Style x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"), # Style y-axis title
+    axis.text.x = element_text(size = 12), # Style x-axis text
+    axis.text.y = element_text(size = 12), # Style y-axis text
+    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
+    panel.grid.minor = element_blank() # Remove minor grid lines
+  ) + 
+  annotate("text", x = max(final2_Y4$nlr) * 0.9, y = max(final2_Y4$MCATOT) * 0.85,
+           label = paste("Kendall's tau:", "-2.595", "\np-value:", "0.009"),
+           size = 4.5, hjust=0)
+
+plot1
+
+
+
+
+# Screening: Healthy Control
+# NLR and MoCA
+cor_SC_nlr_moca <- cor.test(final2_SC_HC$nlr, final2_SC_HC$MCATOT, method = "kendall")
+cor_SC_nlr_moca
+
+# LMR and MoCA 
+cor_SC_lmr_moca <- cor.test(final2_SC_HC$lmr, final2_SC_HC$MCATOT, method = "kendall")
+cor_SC_lmr_moca
+
+
+
+# 4th year: Parkinson's Disease
+# NLR and MoCA *
+cor_Y4_nlr_moca <- cor.test(final2_Y4_HC$nlr, final2_Y4_HC$MCATOT, method = "kendall")
+cor_Y4_nlr_moca
+
+# LMR and MoCA *
+cor_Y4_lmr_moca <- cor.test(final2_Y4_HC$lmr, final2_Y4_HC$MCATOT, method = "kendall")
+cor_Y4_lmr_moca
+
+
+final2_Y4_HC_red_nlr <- final2_Y4_HC[ , c(3, 5:7, 10, 13)]
+final2_Y4_HC_red_lmr <- final2_Y4_HC[ , c(3, 5:7, 10, 14)]
+
+
+# pc1 <- pcor(final2_Y4_red_nlr, method = "spearman")
+# pc2 <- pcor(final2_Y4_red_lmr, method = "spearman")
+pc3 <- pcor(final2_Y4_HC_red_nlr, method = "kendall")
+pc4 <- pcor(final2_Y4_HC_red_lmr, method = "kendall")
+
+# pc1
+# pc2
+pc3
+pc4
+
+
+# So, NLR is associated with reduced cognition in Parkinson's Disease.
+
+pc3$p.value
