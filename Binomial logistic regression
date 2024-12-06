@@ -188,20 +188,25 @@ summary(cogTest.1)
 # Section 4.7: Creating some plots for our model:
 # Section 4.7.1: Plot type 1
 mydataset$mocap <- ifelse(mydataset$moca == "Normal" , 0 , 1)
-plot1 <- ggplot(mydataset, aes(x=Tot, y=mocap)) +
-  geom_jitter(height = 0.05 , alpha = 0.7) +
-  geom_smooth(method="glm", method.args=list(family="binomial"), se=TRUE) +
+plot1 <- ggplot(mydataset, aes(x = Tot, y = mocap)) +
+  geom_jitter(height = 0.05, alpha = 0.7) +
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), 
+              se = TRUE, color = "#861129", size = 1.5) +
   theme_classic() + 
   labs(title = NULL,
        x = "RBDSQ score",
        y = "Cognition status") +
   theme(plot.title = element_text(size = 14, face = "bold"),
-        axis.title = element_text(size = 13),
+        axis.title.x = element_text(size = 13), # X-axis title color
+        axis.title.y = element_text(size = 13), # Y-axis title color
         legend.title = element_text(size = 10),
         legend.text = element_text(size = 10),
-        legend.position = "left") +
+        legend.position = "left",
+        panel.background = element_rect(fill = "#EBE9EA"), # Panel background color
+        plot.background = element_rect(fill = "#EBE9EA")) + # Plot background color
   scale_y_continuous(labels = c("Normal cognition", "Impaired cognition"),
                      breaks = c(0, 1))
+
 plot1
 
 # Section 4.7.2: Plot type 2
