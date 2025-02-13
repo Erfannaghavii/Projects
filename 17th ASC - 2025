@@ -1,0 +1,1396 @@
+library(readr)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tableone)
+library(arsenal)
+library(gtsummary)
+library(tidyr)
+library(viridisLite)
+library(viridis)
+library(hrbrthemes)
+library(effectsize)
+library(tidyverse)
+library(rstatix)
+library(ggseg)
+library(ggseg3d)
+library(patchwork)
+library(ppcor)
+library(ggdist)
+library(ggridges)
+library(reshape2)
+library(ggsignif)
+library(ggpubr)
+library(grid)
+
+data <- read_excel("C:/Users/mehdi/Desktop/Projects/30- EMAZA/Final.xlsx")
+
+Restricted <- read_delim("C:/Users/mehdi/Desktop/Projects/9 - Insula (Ongoing)/Data files/Final dataset/RESTRICTED_amirhussein_2_19_2019_2_47_59.txt", 
+                         delim = "\t", escape_double = FALSE, 
+                         trim_ws = TRUE)
+
+
+unrestricted <- read_delim("C:/Users/mehdi/Desktop/Projects/9 - Insula (Ongoing)/Data files/Final dataset/unrestricted_erfannaghavii2000_10_19_2023_3_9_32.txt", 
+                           delim = "\t", escape_double = FALSE, 
+                           trim_ws = TRUE)
+
+data2 <- merge(data, unrestricted[ , c(1 , 4)])
+final <- merge(data2, Restricted[ , c(1 , 2 , 116 , 117 , 119 , 120 , 122)])
+
+results <- list()
+
+
+# Fitting an ANOVA model
+met <- data.frame()
+amp <- data.frame()
+coc <- data.frame()
+thc <- data.frame()
+pduu <- data.frame()
+
+# Methamphetamine
+
+for (i in 1:8) {
+  
+  Region <- colnames(final)[i + 1]
+  model_formula <- as.formula(paste(Region, "~ MethAmphetamine + Age_in_Yrs + Gender"))
+  ancova_result <- car::Anova(aov(formula = model_formula, data = final))
+  p_value <- ancova_result$`Pr(>F)`[1]
+  eta <- partial_eta_squared(car::Anova(aov(formula = model_formula, data = final)))[1]
+  a <- data.frame(Region , p_value , eta)
+  met <- rbind(met, a)
+  
+}
+met$fdr <- p.adjust(met$p_value, method = "fdr")
+
+# Amphethamine
+
+for (i in 1:8) {
+  
+  Region <- colnames(final)[i + 1]
+  model_formula <- as.formula(paste(Region, "~ Amphetamines + Age_in_Yrs + Gender"))
+  ancova_result <- car::Anova(aov(formula = model_formula, data = final))
+  p_value <- ancova_result$`Pr(>F)`[1]
+  eta <- partial_eta_squared(car::Anova(aov(formula = model_formula, data = final)))[1]
+  a <- data.frame(Region , p_value , eta)
+  amp <- rbind(amp, a)
+  
+}
+amp$fdr <- p.adjust(amp$p_value, method = "fdr")
+
+
+# Cocaine
+
+for (i in 1:8) {
+  
+  Region <- colnames(final)[i + 1]
+  model_formula <- as.formula(paste(Region, "~ Cocaine + Age_in_Yrs + Gender"))
+  ancova_result <- car::Anova(aov(formula = model_formula, data = final))
+  p_value <- ancova_result$`Pr(>F)`[1]
+  eta <- partial_eta_squared(car::Anova(aov(formula = model_formula, data = final)))[1]
+  a <- data.frame(Region , p_value , eta)
+  coc <- rbind(coc, a)
+  
+}
+coc$fdr <- p.adjust(coc$p_value, method = "fdr")
+
+
+# THC
+
+for (i in 1:8) {
+  
+  Region <- colnames(final)[i + 1]
+  model_formula <- as.formula(paste(Region, "~ THC + Age_in_Yrs + Gender"))
+  ancova_result <- car::Anova(aov(formula = model_formula, data = final))
+  p_value <- ancova_result$`Pr(>F)`[1]
+  eta <- partial_eta_squared(car::Anova(aov(formula = model_formula, data = final)))[1]
+  a <- data.frame(Region , p_value , eta)
+  thc <- rbind(thc, a)
+  
+}
+thc$fdr <- p.adjust(thc$p_value, method = "fdr")
+
+
+
+# Cocaine: None!
+# THC: rACC - rOFC - rIC - lACC - lOFC - lIC
+# Amphetamine: None!
+# Methamphetamine: rDLPFC - lDLPFC - rACC
+# Drink: rDLPFC (-), rACC (-), rOFC (-), lDLPFC (-), lACC (-), lOFC (-)
+# PDU: None!
+
+final$gen <- ifelse(final$Gender == "M", 1 , 0)
+
+model <- pcor(na.omit(final[ , c(2 , 11 , 16 , 17)]), method = "spearman")
+model
+
+
+# PDU
+
+
+
+final$p <-rowSums(final[ , c(12:15)])
+final$drink <- ifelse(final$Total_Drinks_7days == 0, 0 , 1)
+final$p2 <- rowSums(final[ , c(17:18)])
+final$pdu <- ifelse(final$p2 == 0, 0 , 1)
+CreateTableOne(data = final, strata = "pdu")
+for (i in 1:8) {
+  
+  Region <- colnames(final)[i + 1]
+  model_formula <- as.formula(paste(Region, "~ pdu + Age_in_Yrs + Gender"))
+  ancova_result <- car::Anova(aov(formula = model_formula, data = final))
+  p_value <- ancova_result$`Pr(>F)`[1]
+  eta <- partial_eta_squared(car::Anova(aov(formula = model_formula, data = final)))[1]
+  a <- data.frame(Region , p_value , eta)
+  pduu <- rbind(pduu, a)
+  
+}
+pduu$fdr <- p.adjust(pduu$p_value, method = "fdr")
+
+
+region <- c("rostral middle frontal", "caudal middle frontal", "superior frontal", "rostral anterior cingulate", "caudal anterior cingulate", "lateral orbitofrontal", "medial orbitofrontal", "insula", "pars opercularis")
+
+region <- as.data.frame(region)
+
+
+# THC plot
+THC <- subset(final, THC == TRUE)
+THC_control <- setdiff(final, THC)
+
+# Right hemisphere
+rthc <- c(mean(THC$rDLPFC), mean(THC$rDLPFC), mean(THC$rDLPFC),
+          mean(THC$rACC), mean(THC$rACC), mean(THC$rOFC),
+          mean(THC$rOFC), mean(THC$rIC), mean(THC$rIC)) 
+rthc <- as.data.frame(rthc)
+rthct <- cbind(region, rthc)
+
+rthc_plot <- ggseg(.data = rthct, colour = "black", 
+                   mapping = aes(fill = rthc), 
+                   position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rthct$rthc)) +
+  labs(title = "Right hemisphere", fill = "Cortical thickness") +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 5, size = 20 , face = "bold"),
+        legend.position = "right",
+        legend.direction = "vertical")
+rthc_plot
+
+
+
+# Left hemisphere
+lthc <- c(mean(THC$lDLPFC), mean(THC$lDLPFC), mean(THC$lDLPFC),
+          mean(THC$lACC), mean(THC$lACC), mean(THC$lOFC),
+          mean(THC$lOFC), mean(THC$lIC), mean(THC$lIC)) 
+lthc <- as.data.frame(lthc)
+lthct <- cbind(region, lthc)
+
+lthc_plot <- ggseg(.data = lthct, colour = "black", 
+                   mapping = aes(fill = lthc), 
+                   position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "magma") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rthct$rthc)) +
+  labs(title = "Left hemisphere", fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 5, size = 20 , face = "bold"),
+        legend.position = "none",
+        legend.direction = "vertical") +
+  annotate("text", x = -Inf, y = 0, label = "THC group", angle = 90, hjust = -0.5, vjust = 1, size = 5)
+lthc_plot
+
+
+
+thc_plot<- lthc_plot + rthc_plot
+thc_plot
+
+# Control
+# Right hemisphere
+rthc_c <- c(mean(THC_control$rDLPFC), mean(THC_control$rDLPFC), mean(THC_control$rDLPFC),
+            mean(THC_control$rACC), mean(THC_control$rACC), mean(THC_control$rOFC),
+            mean(THC_control$rOFC), mean(THC_control$rIC), mean(THC_control$rIC)) 
+rthc_c <- as.data.frame(rthc_c)
+rthc_ct <- cbind(region, rthc_c)
+
+
+rthc_c_plot <- ggseg(.data = rthc_ct, colour = "black", 
+                     mapping = aes(fill = rthc_c), 
+                     position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rthct$rthc)) +
+  labs(title = NULL, fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical")
+rthc_c_plot
+
+
+
+# Left hemisphere
+lthc_c <- c(mean(THC_control$lDLPFC), mean(THC_control$lDLPFC), mean(THC_control$lDLPFC),
+            mean(THC_control$lACC), mean(THC_control$lACC), mean(THC_control$lOFC),
+            mean(THC_control$lOFC), mean(THC_control$lIC), mean(THC_control$lIC)) 
+lthc_c <- as.data.frame(lthc_c)
+lthc_ct <- cbind(region, lthc_c)
+
+lthc_c_plot <- ggseg(.data = lthc_ct, colour = "black", 
+                     mapping = aes(fill = lthc_c), 
+                     position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rthct$rthc)) +
+  labs(title = NULL, fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical") +
+  annotate("text", x = -Inf, y = 0, label = "Control group", angle = 90, hjust = -0.1, vjust = 1, size = 5)
+
+lthc_c_plot
+
+
+
+thc_c_plot <- lthc_c_plot + rthc_c_plot
+thc_c_plot
+
+plot_thc <- thc_plot/thc_c_plot + plot_layout(guides = "collect")
+plot_thc
+
+
+R_THC_diff <- merge(rthct, rthc_ct, by  = "region")
+R_THC_diff
+R_THC_diff$diff <- R_THC_diff$rthc - R_THC_diff$rthc_c
+R_THC_diff <- R_THC_diff[ , -c(2:3)]
+
+L_THC_diff <- merge(lthct, lthc_ct, by  = "region")
+L_THC_diff
+L_THC_diff$diff <- L_THC_diff$lthc - L_THC_diff$lthc_c
+L_THC_diff <- L_THC_diff[ , -c(2:3)]
+
+# Difference plot
+# Right hemisphere
+r_thc_diff_plot <- ggseg(.data = R_THC_diff, colour = "black", 
+                         mapping = aes(fill = diff), 
+                         position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "firebrick", mid = "goldenrod", high = "white", midpoint = median(R_THC_diff$diff)) +
+  labs(title = NULL, fill = "Cortical thickness difference") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right",
+        legend.direction = "vertical")
+r_thc_diff_plot
+
+
+
+# Left hemisphere
+l_thc_diff_plot <- ggseg(.data = L_THC_diff, colour = "black", 
+                         mapping = aes(fill = diff), 
+                         position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "firebrick", mid = "goldenrod", high = "white", midpoint = median(R_THC_diff$diff)) +
+  labs(title = NULL, fill = "Cortical thickness difference") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical")
+l_thc_diff_plot
+
+thc_diff_plot <- l_thc_diff_plot + r_thc_diff_plot
+thc_diff_plot
+
+
+
+THC_2 <- final[ , c(1:9 , 13)]
+THC_2$THC <- ifelse(THC_2$THC == "TRUE", "THC", "Control")
+
+colors <- c("Control" = "dodgerblue", "THC" = "darkorange")
+
+
+THC_2_long <- THC_2 %>%
+  melt(id.vars = "THC", measure.vars = c("rDLPFC", "rIC", "rOFC", "rACC"), 
+       variable.name = "Region", value.name = "Cortical_Thickness")
+
+region_labels_r <- c("rDLPFC" = "Right DLPFC", 
+                     "rIC" = "Right IC", 
+                     "rOFC" = "Right OFC", 
+                     "rACC" = "Right ACC")
+
+region_labels_l <- c("lDLPFC" = "Left DLPFC", 
+                     "lIC" = "Left IC", 
+                     "lOFC" = "Left OFC", 
+                     "lACC" = "Left ACC")
+
+
+
+ggplot(THC_2_long, aes(x = Cortical_Thickness, fill = THC, color = THC)) + 
+  ggdist::stat_halfeye(adjust = 0.5, justification = -0.3, .width = 0, alpha = 0.5, point_colour = NA) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.5) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  labs(title = "Cortical thickness difference in the right hemisphere", 
+       x = "Cortical thickness", y = "Density of distribution", fill = "THC") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  theme_classic() +
+  facet_wrap(~ Region, scales = "free_x", ncol = 2, labeller = as_labeller(region_labels_r)) + 
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 14, margin = margin(b = 2)))
+
+
+THC_2_long_l <- THC_2 %>%
+  melt(id.vars = "THC", measure.vars = c("lDLPFC", "lIC", "lOFC", "lACC"), 
+       variable.name = "Region", value.name = "Cortical_Thickness")
+
+ggplot(THC_2_long_l, aes(x = Cortical_Thickness, fill = THC, color = THC)) + 
+  ggdist::stat_halfeye(adjust = 0.5, justification = -0.3, .width = 0, alpha = 0.5, point_colour = NA) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.5) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  labs(title = "Cortical thickness difference in the left hemisphere", x = "Cortical thickness", y = "Density of distribution", fill = "THC") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  theme_classic() +
+  facet_wrap(~ Region, scales = "free_x", ncol = 2, labeller = as_labeller(region_labels_l)) +
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 14, margin = margin(b = 2)))
+
+
+
+
+
+
+
+
+
+# ================================================
+
+
+
+
+
+
+
+
+
+# Cocaine
+COC <- subset(final, Cocaine == TRUE)
+COC_control <- setdiff(final, COC)
+
+# Right hemisphere
+rcoc <- c(mean(COC$rDLPFC), mean(COC$rDLPFC), mean(COC$rDLPFC),
+          mean(COC$rACC), mean(COC$rACC), mean(COC$rOFC),
+          mean(COC$rOFC), mean(COC$rIC), mean(COC$rIC)) 
+rcoc <- as.data.frame(rcoc)
+rcoct <- cbind(region, rcoc)
+
+rcoc_plot <- ggseg(.data = rcoct, colour = "black", 
+                   mapping = aes(fill = rcoc), 
+                   position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rcoct$rcoc)) +
+  labs(title = "Right hemisphere", fill = "Cortical thickness") +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 5, size = 20 , face = "bold"),
+        legend.position = "right",
+        legend.direction = "vertical")
+rcoc_plot
+
+
+
+# Left hemisphere
+lcoc <- c(mean(COC$lDLPFC), mean(COC$lDLPFC), mean(COC$lDLPFC),
+          mean(COC$lACC), mean(COC$lACC), mean(COC$lOFC),
+          mean(COC$lOFC), mean(COC$lIC), mean(COC$lIC)) 
+lcoc <- as.data.frame(lcoc)
+lcoct <- cbind(region, lcoc)
+
+lcoc_plot <- ggseg(.data = lcoct, colour = "black", 
+                   mapping = aes(fill = lcoc), 
+                   position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "magma") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rcoct$rcoc)) +
+  labs(title = "Left hemisphere", fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 5, size = 20 , face = "bold"),
+        legend.position = "none",
+        legend.direction = "vertical") +
+  annotate("text", x = -Inf, y = 0, label = "Cocaine group", angle = 90, hjust = -0.1, vjust = 1, size = 5)
+lcoc_plot
+
+
+
+coc_plot<- lcoc_plot + rcoc_plot
+coc_plot
+
+# Control
+# Right hemisphere
+rcoc_c <- c(mean(COC_control$rDLPFC), mean(COC_control$rDLPFC), mean(COC_control$rDLPFC),
+            mean(COC_control$rACC), mean(COC_control$rACC), mean(COC_control$rOFC),
+            mean(COC_control$rOFC), mean(COC_control$rIC), mean(COC_control$rIC)) 
+rcoc_c <- as.data.frame(rcoc_c)
+rcoc_ct <- cbind(region, rcoc_c)
+
+
+rcoc_c_plot <- ggseg(.data = rcoc_ct, colour = "black", 
+                     mapping = aes(fill = rcoc_c), 
+                     position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rcoct$rcoc)) +
+  labs(title = NULL, fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical")
+rcoc_c_plot
+
+
+
+# Left hemisphere
+lcoc_c <- c(mean(COC_control$lDLPFC), mean(COC_control$lDLPFC), mean(COC_control$lDLPFC),
+            mean(COC_control$lACC), mean(COC_control$lACC), mean(COC_control$lOFC),
+            mean(COC_control$lOFC), mean(COC_control$lIC), mean(COC_control$lIC)) 
+lcoc_c <- as.data.frame(lcoc_c)
+lcoc_ct <- cbind(region, lcoc_c)
+
+lcoc_c_plot <- ggseg(.data = lcoc_ct, colour = "black", 
+                     mapping = aes(fill = lcoc_c), 
+                     position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rcoct$rcoc)) +
+  labs(title = NULL, fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical") +
+  annotate("text", x = -Inf, y = 0, label = "Control group", angle = 90, hjust = -0.1, vjust = 1, size = 5)
+
+lcoc_c_plot
+
+
+
+coc_c_plot <- lcoc_c_plot + rcoc_c_plot
+coc_c_plot
+
+plot_coc <- coc_plot/coc_c_plot + plot_layout(guides = "collect")
+plot_coc
+
+
+R_COC_diff <- merge(rcoct, rcoc_ct, by  = "region")
+R_COC_diff
+R_COC_diff$diff <- R_COC_diff$rcoc - R_COC_diff$rcoc_c
+R_COC_diff <- R_COC_diff[ , -c(2:3)]
+
+L_COC_diff <- merge(lcoct, lcoc_ct, by  = "region")
+L_COC_diff
+L_COC_diff$diff <- L_COC_diff$lcoc - L_COC_diff$lcoc_c
+L_COC_diff <- L_COC_diff[ , -c(2:3)]
+
+# Difference plot
+# Right hemisphere
+r_coc_diff_plot <- ggseg(.data = R_COC_diff, colour = "black", 
+                         mapping = aes(fill = diff), 
+                         position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(R_COC_diff$diff)) +
+  labs(title = NULL, fill = "Cortical thickness difference") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right",
+        legend.direction = "vertical")
+r_coc_diff_plot
+
+
+
+# Left hemisphere
+l_coc_diff_plot <- ggseg(.data = L_COC_diff, colour = "black", 
+                         mapping = aes(fill = diff), 
+                         position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(R_COC_diff$diff)) +
+  labs(title = NULL, fill = "Cortical thickness difference") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical")
+l_coc_diff_plot
+
+coc_diff_plot <- l_coc_diff_plot + r_coc_diff_plot
+coc_diff_plot
+
+
+
+COC_2 <- final[ , c(1:9 , 12)]
+COC_2$COC <- ifelse(COC_2$Cocaine == "TRUE", "Cocaine", "Control")
+
+colors <- c("Control" = "dodgerblue", "Cocaine" = "darkorange")
+
+
+COC_2_long <- COC_2 %>%
+  melt(id.vars = "Cocaine", measure.vars = c("rDLPFC", "rIC", "rOFC", "rACC"), 
+       variable.name = "Region", value.name = "Cortical_Thickness")
+COC_2_long$Cocaine <- ifelse(COC_2_long$Cocaine == "FALSE", "Control", "Cocaine")
+
+region_labels_r <- c("rDLPFC" = "Right DLPFC", 
+                     "rIC" = "Right IC", 
+                     "rOFC" = "Right OFC", 
+                     "rACC" = "Right ACC")
+
+region_labels_l <- c("lDLPFC" = "Left DLPFC", 
+                     "lIC" = "Left IC", 
+                     "lOFC" = "Left OFC", 
+                     "lACC" = "Left ACC")
+
+
+
+ggplot(COC_2_long, aes(x = Cortical_Thickness, fill = Cocaine, color = Cocaine)) + 
+  ggdist::stat_halfeye(adjust = 0.5, justification = -0.3, .width = 0, alpha = 0.5, point_colour = NA) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.5) + 
+  scale_fill_manual(values = colors) + 
+  scale_color_manual(values = colors) +
+  labs(title = "Cortical thickness difference in the right hemisphere", 
+       x = "Cortical thickness", y = "Density of distribution", fill = "Cocaine") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  theme_classic() +
+  facet_wrap(~ Region, scales = "free_x", ncol = 2, labeller = as_labeller(region_labels_r)) + 
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 14, margin = margin(b = 2)))
+
+
+COC_2_long_l <- COC_2 %>%
+  melt(id.vars = "Cocaine", measure.vars = c("lDLPFC", "lIC", "lOFC", "lACC"), 
+       variable.name = "Region", value.name = "Cortical_Thickness")
+COC_2_long_l$Cocaine <- ifelse(COC_2_long_l$Cocaine == "FALSE", "Control", "Cocaine")
+
+ggplot(COC_2_long_l, aes(x = Cortical_Thickness, fill = Cocaine, color = Cocaine)) + 
+  ggdist::stat_halfeye(adjust = 0.5, justification = -0.3, .width = 0, alpha = 0.5, point_colour = NA) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.5) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  labs(title = "Cortical thickness difference in the left hemisphere", x = "Cortical thickness", y = "Density of distribution", fill = "Cocaine") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  theme_classic() +
+  facet_wrap(~ Region, scales = "free_x", ncol = 2, labeller = as_labeller(region_labels_l)) +
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 14, margin = margin(b = 2)))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ================================================
+
+
+
+
+
+
+
+
+
+# Amphetamines
+Amp <- subset(final, Amphetamines == TRUE)
+Amp_control <- setdiff(final, Amp)
+
+# Right hemisphere
+ramp <- c(mean(Amp$rDLPFC), mean(Amp$rDLPFC), mean(Amp$rDLPFC),
+          mean(Amp$rACC), mean(Amp$rACC), mean(Amp$rOFC),
+          mean(Amp$rOFC), mean(Amp$rIC), mean(Amp$rIC)) 
+ramp <- as.data.frame(ramp)
+rampt <- cbind(region, ramp)
+
+ramp_plot <- ggseg(.data = rampt, colour = "black", 
+                   mapping = aes(fill = ramp), 
+                   position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rampt$ramp)) +
+  labs(title = "Right hemisphere", fill = "Cortical thickness") +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 5, size = 20 , face = "bold"),
+        legend.position = "right",
+        legend.direction = "vertical")
+ramp_plot
+
+
+
+# Left hemisphere
+lamp <- c(mean(Amp$lDLPFC), mean(Amp$lDLPFC), mean(Amp$lDLPFC),
+          mean(Amp$lACC), mean(Amp$lACC), mean(Amp$lOFC),
+          mean(Amp$lOFC), mean(Amp$lIC), mean(Amp$lIC)) 
+lamp <- as.data.frame(lamp)
+lampt <- cbind(region, lamp)
+
+lamp_plot <- ggseg(.data = lampt, colour = "black", 
+                   mapping = aes(fill = lamp), 
+                   position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "magma") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rampt$ramp)) +
+  labs(title = "Left hemisphere", fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 5, size = 20 , face = "bold"),
+        legend.position = "none",
+        legend.direction = "vertical") +
+  annotate("text", x = -Inf, y = 0, label = "Amphetamine group", angle = 90, hjust = 0, vjust = 1, size = 4.75)
+lamp_plot
+
+
+
+amp_plot<- lamp_plot + ramp_plot
+amp_plot
+
+# Control
+# Right hemisphere
+ramp_c <- c(mean(Amp_control$rDLPFC), mean(Amp_control$rDLPFC), mean(Amp_control$rDLPFC),
+            mean(Amp_control$rACC), mean(Amp_control$rACC), mean(Amp_control$rOFC),
+            mean(Amp_control$rOFC), mean(Amp_control$rIC), mean(Amp_control$rIC)) 
+ramp_c <- as.data.frame(ramp_c)
+ramp_ct <- cbind(region, ramp_c)
+
+
+ramp_c_plot <- ggseg(.data = ramp_ct, colour = "black", 
+                     mapping = aes(fill = ramp_c), 
+                     position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rampt$ramp)) +
+  labs(title = NULL, fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical")
+ramp_c_plot
+
+
+
+# Left hemisphere
+lamp_c <- c(mean(Amp_control$lDLPFC), mean(Amp_control$lDLPFC), mean(Amp_control$lDLPFC),
+            mean(Amp_control$lACC), mean(Amp_control$lACC), mean(Amp_control$lOFC),
+            mean(Amp_control$lOFC), mean(Amp_control$lIC), mean(Amp_control$lIC)) 
+lamp_c <- as.data.frame(lamp_c)
+lamp_ct <- cbind(region, lamp_c)
+
+lamp_c_plot <- ggseg(.data = lamp_ct, colour = "black", 
+                     mapping = aes(fill = lamp_c), 
+                     position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rampt$ramp)) +
+  labs(title = NULL, fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical") +
+  annotate("text", x = -Inf, y = 0, label = "Control group", angle = 90, hjust = -0.1, vjust = 1, size = 5)
+
+lamp_c_plot
+
+
+
+amp_c_plot <- lamp_c_plot + ramp_c_plot
+amp_c_plot
+
+plot_amp <- amp_plot/amp_c_plot + plot_layout(guides = "collect")
+plot_amp
+
+
+R_Amp_diff <- merge(rampt, ramp_ct, by  = "region")
+R_Amp_diff
+R_Amp_diff$diff <- R_Amp_diff$ramp - R_Amp_diff$ramp_c
+R_Amp_diff <- R_Amp_diff[ , -c(2:3)]
+
+L_Amp_diff <- merge(lampt, lamp_ct, by  = "region")
+L_Amp_diff
+L_Amp_diff$diff <- L_Amp_diff$lamp - L_Amp_diff$lamp_c
+L_Amp_diff <- L_Amp_diff[ , -c(2:3)]
+
+# Difference plot
+# Right hemisphere
+r_amp_diff_plot <- ggseg(.data = R_Amp_diff, colour = "black", 
+                         mapping = aes(fill = diff), 
+                         position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(R_Amp_diff$diff)) +
+  labs(title = NULL, fill = "Cortical thickness difference") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right",
+        legend.direction = "vertical")
+r_amp_diff_plot
+
+
+
+# Left hemisphere
+l_amp_diff_plot <- ggseg(.data = L_Amp_diff, colour = "black", 
+                         mapping = aes(fill = diff), 
+                         position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(R_Amp_diff$diff)) +
+  labs(title = NULL, fill = "Cortical thickness difference") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical")
+l_amp_diff_plot
+
+amp_diff_plot <- l_amp_diff_plot + r_amp_diff_plot
+amp_diff_plot
+
+
+
+Amp_2 <- final[ , c(1:9 , 14)]
+Amp_2$Amp <- ifelse(Amp_2$Amphetamines == "TRUE", "Amphetamines", "Control")
+
+colors <- c("Control" = "dodgerblue", "Amphetamines" = "darkorange")
+
+
+Amp_2_long <- Amp_2 %>%
+  melt(id.vars = "Amphetamines", measure.vars = c("rDLPFC", "rIC", "rOFC", "rACC"), 
+       variable.name = "Region", value.name = "Cortical_Thickness")
+Amp_2_long$Amphetamines <- ifelse(Amp_2_long$Amphetamines == "FALSE", "Control", "Amphetamines")
+
+region_labels_r <- c("rDLPFC" = "Right DLPFC", 
+                     "rIC" = "Right IC", 
+                     "rOFC" = "Right OFC", 
+                     "rACC" = "Right ACC")
+
+region_labels_l <- c("lDLPFC" = "Left DLPFC", 
+                     "lIC" = "Left IC", 
+                     "lOFC" = "Left OFC", 
+                     "lACC" = "Left ACC")
+
+
+
+ggplot(Amp_2_long, aes(x = Cortical_Thickness, fill = Amphetamines, color = Amphetamines)) + 
+  ggdist::stat_halfeye(adjust = 0.5, justification = -0.3, .width = 0, alpha = 0.5, point_colour = NA) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.5) + 
+  scale_fill_manual(values = colors) + 
+  scale_color_manual(values = colors) +
+  labs(title = "Cortical thickness difference in the right hemisphere", 
+       x = "Cortical thickness", y = "Density of distribution", fill = "Amphetamines") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  theme_classic() +
+  facet_wrap(~ Region, scales = "free_x", ncol = 2, labeller = as_labeller(region_labels_r)) + 
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 14, margin = margin(b = 2)))
+
+
+Amp_2_long_l <- Amp_2 %>%
+  melt(id.vars = "Amphetamines", measure.vars = c("lDLPFC", "lIC", "lOFC", "lACC"), 
+       variable.name = "Region", value.name = "Cortical_Thickness")
+Amp_2_long_l$Amphetamines <- ifelse(Amp_2_long_l$Amphetamines == "FALSE", "Control", "Amphetamines")
+
+ggplot(Amp_2_long_l, aes(x = Cortical_Thickness, fill = Amphetamines, color = Amphetamines)) + 
+  ggdist::stat_halfeye(adjust = 0.5, justification = -0.3, .width = 0, alpha = 0.5, point_colour = NA) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.5) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  labs(title = "Cortical thickness difference in the left hemisphere", x = "Cortical thickness", y = "Density of distribution", fill = "Amphetamines") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  theme_classic() +
+  facet_wrap(~ Region, scales = "free_x", ncol = 2, labeller = as_labeller(region_labels_l)) +
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 14, margin = margin(b = 2)))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ================================================
+
+
+
+
+
+
+
+
+
+# MethAmphetamine
+Met <- subset(final, MethAmphetamine == TRUE)
+Met_control <- setdiff(final, Met)
+
+# Right hemisphere
+rmet <- c(mean(Met$rDLPFC), mean(Met$rDLPFC), mean(Met$rDLPFC),
+          mean(Met$rACC), mean(Met$rACC), mean(Met$rOFC),
+          mean(Met$rOFC), mean(Met$rIC), mean(Met$rIC)) 
+rmet <- as.data.frame(rmet)
+rmett <- cbind(region, rmet)
+
+rmet_plot <- ggseg(.data = rmett, colour = "black", 
+                   mapping = aes(fill = rmet), 
+                   position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rmett$rmet)) +
+  labs(title = "Right hemisphere", fill = "Cortical thickness") +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 5, size = 20 , face = "bold"),
+        legend.position = "right",
+        legend.direction = "vertical")
+rmet_plot
+
+
+
+# Left hemisphere
+lmet <- c(mean(Met$lDLPFC), mean(Met$lDLPFC), mean(Met$lDLPFC),
+          mean(Met$lACC), mean(Met$lACC), mean(Met$lOFC),
+          mean(Met$lOFC), mean(Met$lIC), mean(Met$lIC)) 
+lmet <- as.data.frame(lmet)
+lmett <- cbind(region, lmet)
+
+lmet_plot <- ggseg(.data = lmett, colour = "black", 
+                   mapping = aes(fill = lmet), 
+                   position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "magma") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rmett$rmet)) +
+  labs(title = "Left hemisphere", fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 5, size = 20 , face = "bold"),
+        legend.position = "none",
+        legend.direction = "vertical") +
+  annotate("text", x = -Inf, y = 0, label = "MethAmphetamine", angle = 90, hjust = 0, vjust = 1, size = 4.75)
+lmet_plot
+
+
+
+met_plot<- lmet_plot + rmet_plot
+met_plot
+
+# Control
+# Right hemisphere
+rmet_c <- c(mean(Met_control$rDLPFC), mean(Met_control$rDLPFC), mean(Met_control$rDLPFC),
+            mean(Met_control$rACC), mean(Met_control$rACC), mean(Met_control$rOFC),
+            mean(Met_control$rOFC), mean(Met_control$rIC), mean(Met_control$rIC)) 
+rmet_c <- as.data.frame(rmet_c)
+rmet_ct <- cbind(region, rmet_c)
+
+
+rmet_c_plot <- ggseg(.data = rmet_ct, colour = "black", 
+                     mapping = aes(fill = rmet_c), 
+                     position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rmett$rmet)) +
+  labs(title = NULL, fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical")
+rmet_c_plot
+
+
+
+# Left hemisphere
+lmet_c <- c(mean(Met_control$lDLPFC), mean(Met_control$lDLPFC), mean(Met_control$lDLPFC),
+            mean(Met_control$lACC), mean(Met_control$lACC), mean(Met_control$lOFC),
+            mean(Met_control$lOFC), mean(Met_control$lIC), mean(Met_control$lIC)) 
+lmet_c <- as.data.frame(lmet_c)
+lmet_ct <- cbind(region, lmet_c)
+
+lmet_c_plot <- ggseg(.data = lmet_ct, colour = "black", 
+                     mapping = aes(fill = lmet_c), 
+                     position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rmett$rmet)) +
+  labs(title = NULL, fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical") +
+  annotate("text", x = -Inf, y = 0, label = "Control group", angle = 90, hjust = -0.1, vjust = 1, size = 5)
+
+lmet_c_plot
+
+
+
+met_c_plot <- lmet_c_plot + rmet_c_plot
+met_c_plot
+
+plot_met <- met_plot/met_c_plot + plot_layout(guides = "collect")
+plot_met
+
+
+R_Met_diff <- merge(rmett, rmet_ct, by  = "region")
+R_Met_diff
+R_Met_diff$diff <- R_Met_diff$rmet - R_Met_diff$rmet_c
+R_Met_diff <- R_Met_diff[ , -c(2:3)]
+
+L_Met_diff <- merge(lmett, lmet_ct, by  = "region")
+L_Met_diff
+L_Met_diff$diff <- L_Met_diff$lmet - L_Met_diff$lmet_c
+L_Met_diff <- L_Met_diff[ , -c(2:3)]
+
+# Difference plot
+# Right hemisphere
+r_met_diff_plot <- ggseg(.data = R_Met_diff, colour = "black", 
+                         mapping = aes(fill = diff), 
+                         position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(R_Met_diff$diff)) +
+  labs(title = NULL, fill = "Cortical thickness difference") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right",
+        legend.direction = "vertical")
+r_met_diff_plot
+
+
+
+# Left hemisphere
+l_met_diff_plot <- ggseg(.data = L_Met_diff, colour = "black", 
+                         mapping = aes(fill = diff), 
+                         position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(R_Met_diff$diff)) +
+  labs(title = NULL, fill = "Cortical thickness difference") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical")
+l_met_diff_plot
+
+met_diff_plot <- l_met_diff_plot + r_met_diff_plot
+met_diff_plot
+
+
+
+Met_2 <- final[ , c(1:9 , 15)]
+Met_2$Met <- ifelse(Met_2$MethAmphetamine == "TRUE", "MethAmphetamine", "Control")
+
+colors <- c("Control" = "dodgerblue", "MethAmphetamine" = "darkorange")
+
+
+Met_2_long <- Met_2 %>%
+  melt(id.vars = "MethAmphetamine", measure.vars = c("rDLPFC", "rIC", "rOFC", "rACC"), 
+       variable.name = "Region", value.name = "Cortical_Thickness")
+Met_2_long$MethAmphetamine <- ifelse(Met_2_long$MethAmphetamine == "FALSE", "Control", "MethAmphetamine")
+
+region_labels_r <- c("rDLPFC" = "Right DLPFC", 
+                     "rIC" = "Right IC", 
+                     "rOFC" = "Right OFC", 
+                     "rACC" = "Right ACC")
+
+region_labels_l <- c("lDLPFC" = "Left DLPFC", 
+                     "lIC" = "Left IC", 
+                     "lOFC" = "Left OFC", 
+                     "lACC" = "Left ACC")
+
+
+
+ggplot(Met_2_long, aes(x = Cortical_Thickness, fill = MethAmphetamine, color = MethAmphetamine)) + 
+  ggdist::stat_halfeye(adjust = 0.5, justification = -0.3, .width = 0, alpha = 0.5, point_colour = NA) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.5) + 
+  scale_fill_manual(values = colors) + 
+  scale_color_manual(values = colors) +
+  labs(title = "Cortical thickness difference in the right hemisphere", 
+       x = "Cortical thickness", y = "Density of distribution", fill = "MethAmphetamine") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  theme_classic() +
+  facet_wrap(~ Region, scales = "free_x", ncol = 2, labeller = as_labeller(region_labels_r)) + 
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 14, margin = margin(b = 2)))
+
+
+Met_2_long_l <- Met_2 %>%
+  melt(id.vars = "MethAmphetamine", measure.vars = c("lDLPFC", "lIC", "lOFC", "lACC"), 
+       variable.name = "Region", value.name = "Cortical_Thickness")
+Met_2_long_l$MethAmphetamine <- ifelse(Met_2_long_l$MethAmphetamine == "FALSE", "Control", "MethAmphetamine")
+
+ggplot(Met_2_long_l, aes(x = Cortical_Thickness, fill = MethAmphetamine, color = MethAmphetamine)) + 
+  ggdist::stat_halfeye(adjust = 0.5, justification = -0.3, .width = 0, alpha = 0.5, point_colour = NA) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.5) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  labs(title = "Cortical thickness difference in the left hemisphere", x = "Cortical thickness", y = "Density of distribution", fill = "MethAmphetamine") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  theme_classic() +
+  facet_wrap(~ Region, scales = "free_x", ncol = 2, labeller = as_labeller(region_labels_l)) +
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 14, margin = margin(b = 2)))
+
+
+
+
+
+
+
+
+# =================================
+
+
+
+
+
+
+
+
+
+
+
+
+# Alcohol
+
+rho_value <- -0.1
+p_value <- 0.0096
+correlation_text <- paste0("Spearman's ρ = ", rho_value, ", p = ", p_value)
+
+ggplot(final, aes(x = rDLPFC, y = Total_Drinks_7days)) +
+  geom_point(color = "blue", size = 3, alpha = 0.7) +  # Adjust point size and transparency
+  geom_smooth(method = "lm", color = "red", linetype = "dashed", se = FALSE) +  # Add trend line
+  labs(
+    title = "Association Between Right DLPFC Thickness and Alcohol Consumption",
+    subtitle = "Examining cortical thickness in relation to total drinks consumed in the past week",
+    x = "Right DLPFC Cortical Thickness (mm)",
+    y = "Total Drinks Consumed Over the Last 7 Days"
+  ) +
+  annotate("text", 
+           x = min(final$rDLPFC, na.rm = TRUE) + 0.1,  
+           y = max(final$Total_Drinks_7days, na.rm = TRUE) - 2,  
+           label = correlation_text, size = 5, hjust = 0, fontface = "bold") + 
+  theme_classic(base_size = 14) +  
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 16),  
+    plot.subtitle = element_text(hjust = 0.5, size = 12, color = "gray40"),  
+    axis.title = element_text(face = "bold")  
+  )
+
+
+
+
+final_long <- final %>%
+  tidyr::pivot_longer(cols = c(rDLPFC, rIC, rOFC, rACC), names_to = "Region", values_to = "Thickness")
+
+# Define correlation values (replace with actual values)
+cor_values <- data.frame(
+  Region = c("rDLPFC", "rIC", "rOFC", "rACC"),
+  rho = c(-0.1, -0.026, -0.087, -0.1),
+  p = c(0.0096, 0.38, 0.0043, 0.0092)
+)
+
+# Merge correlation values with long dataset
+final_long <- final_long %>%
+  left_join(cor_values, by = "Region")
+
+# Create scatterplots with facets
+final_long <- final_long %>%
+  left_join(cor_values, by = "Region")
+
+# Create scatterplots with facets
+ggplot(final_long, aes(x = Thickness, y = Total_Drinks_7days)) +
+  geom_point(color = "blue", size = 2, alpha = 0.7) +
+  geom_smooth(method = "lm", color = "red", linetype = "dashed", se = FALSE) +
+  facet_wrap(~ Region, scales = "free_x") +
+  labs(
+    title = "Cortical Thickness and Alcohol Consumption",
+    subtitle = "Exploring associations across four brain regions in the right hemisphere",
+    x = "Cortical Thickness",
+    y = "Total Drinks Consumed Over the Last 7 Days"
+  ) +
+  geom_text(data = cor_values, 
+            aes(x = -Inf, y = Inf, label = paste0("ρ = ", rho, ", p = ", p)), 
+            hjust = -0.1, vjust = 1.5, size = 5, fontface = "bold", inherit.aes = FALSE) +
+  theme_classic(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
+    plot.subtitle = element_text(hjust = 0.5, size = 12, color = "gray40"),
+    axis.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 14),  # Keeps facet title text bold
+    strip.background = element_blank()  # Removes the box around facet labels
+  )
+
+model <- pcor(na.omit(final[ , c(9 , 11 , 16 , 17)]), method = "spearman")
+model
+
+
+
+final_long_l <- final %>%
+  tidyr::pivot_longer(cols = c(lDLPFC, lIC, lOFC, lACC), names_to = "Region", values_to = "Thickness")
+
+# Define correlation values (replace with actual values)
+cor_values <- data.frame(
+  Region = c("lDLPFC", "lIC", "lOFC", "lACC"),
+  rho = c(-0.1, -0.0076, -0.085, -0.091),
+  p = c(0.00068, 0.8, 0.005, 0.0026)
+)
+
+# Merge correlation values with long dataset
+final_long_l <- final_long_l %>%
+  left_join(cor_values, by = "Region")
+
+# Create scatterplots with facets
+final_long_l <- final_long_l %>%
+  left_join(cor_values, by = "Region")
+
+# Create scatterplots with facets
+ggplot(final_long_l, aes(x = Thickness, y = Total_Drinks_7days)) +
+  geom_point(color = "blue", size = 2, alpha = 0.7) +
+  geom_smooth(method = "lm", color = "red", linetype = "dashed", se = FALSE) +
+  facet_wrap(~ Region, scales = "free_x") +
+  labs(
+    title = "Cortical Thickness and Alcohol Consumption",
+    subtitle = "Exploring associations across four brain regions in the left hemisphere",
+    x = "Cortical Thickness",
+    y = "Total Drinks Consumed Over the Last 7 Days"
+  ) +
+  geom_text(data = cor_values, 
+            aes(x = -Inf, y = Inf, label = paste0("ρ = ", rho, ", p = ", p)), 
+            hjust = -0.1, vjust = 1.5, size = 5, fontface = "bold", inherit.aes = FALSE) +
+  theme_classic(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
+    plot.subtitle = element_text(hjust = 0.5, size = 12, color = "gray40"),
+    axis.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 14),  # Keeps facet title text bold
+    strip.background = element_blank()  # Removes the box around facet labels
+  )
+
+
+
+
+
+
+
+
+
+# =================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# PDU
+final$pdu <- ifelse(final$pdu == 1, TRUE, FALSE)
+pdu <- subset(final, pdu == TRUE)
+pdu_control <- setdiff(final, pdu)
+
+# Right hemisphere
+rpdu <- c(mean(pdu$rDLPFC), mean(pdu$rDLPFC), mean(pdu$rDLPFC),
+          mean(pdu$rACC), mean(pdu$rACC), mean(pdu$rOFC),
+          mean(pdu$rOFC), mean(pdu$rIC), mean(pdu$rIC)) 
+rpdu <- as.data.frame(rpdu)
+rpdut <- cbind(region, rpdu)
+
+rpdu_plot <- ggseg(.data = rpdut, colour = "black", 
+                   mapping = aes(fill = rpdu), 
+                   position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rpdut$rpdu)) +
+  labs(title = "Right hemisphere", fill = "Cortical thickness") +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 5, size = 20 , face = "bold"),
+        legend.position = "right",
+        legend.direction = "vertical")
+rpdu_plot
+
+
+
+# Left hemisphere
+lpdu <- c(mean(pdu$lDLPFC), mean(pdu$lDLPFC), mean(pdu$lDLPFC),
+          mean(pdu$lACC), mean(pdu$lACC), mean(pdu$lOFC),
+          mean(pdu$lOFC), mean(pdu$lIC), mean(pdu$lIC)) 
+lpdu <- as.data.frame(lpdu)
+lpdut <- cbind(region, lpdu)
+
+lpdu_plot <- ggseg(.data = lpdut, colour = "black", 
+                   mapping = aes(fill = lpdu), 
+                   position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "magma") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rpdut$rpdu)) +
+  labs(title = "Left hemisphere", fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 5, size = 20 , face = "bold"),
+        legend.position = "none",
+        legend.direction = "vertical") +
+  annotate("text", x = -Inf, y = 0, label = "Poly-drug user group", angle = 90, hjust = 0, vjust = 1, size = 4.75)
+lpdu_plot
+
+
+
+pdu_plot<- lpdu_plot + rpdu_plot
+pdu_plot
+
+# Control
+# Right hemisphere
+rpdu_c <- c(mean(pdu_control$rDLPFC), mean(pdu_control$rDLPFC), mean(pdu_control$rDLPFC),
+            mean(pdu_control$rACC), mean(pdu_control$rACC), mean(pdu_control$rOFC),
+            mean(pdu_control$rOFC), mean(pdu_control$rIC), mean(pdu_control$rIC)) 
+rpdu_c <- as.data.frame(rpdu_c)
+rpdu_ct <- cbind(region, rpdu_c)
+
+
+rpdu_c_plot <- ggseg(.data = rpdu_ct, colour = "black", 
+                     mapping = aes(fill = rpdu_c), 
+                     position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rpdut$rpdu)) +
+  labs(title = NULL, fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical")
+rpdu_c_plot
+
+
+
+# Left hemisphere
+lpdu_c <- c(mean(pdu_control$lDLPFC), mean(pdu_control$lDLPFC), mean(pdu_control$lDLPFC),
+            mean(pdu_control$lACC), mean(pdu_control$lACC), mean(pdu_control$lOFC),
+            mean(pdu_control$lOFC), mean(pdu_control$lIC), mean(pdu_control$lIC)) 
+lpdu_c <- as.data.frame(lpdu_c)
+lpdu_ct <- cbind(region, lpdu_c)
+
+lpdu_c_plot <- ggseg(.data = lpdu_ct, colour = "black", 
+                     mapping = aes(fill = lpdu_c), 
+                     position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(rpdut$rpdu)) +
+  labs(title = NULL, fill = "Cortical Thickness") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical") +
+  annotate("text", x = -Inf, y = 0, label = "Control group", angle = 90, hjust = -0.1, vjust = 1, size = 5)
+
+lpdu_c_plot
+
+
+
+pdu_c_plot <- lpdu_c_plot + rpdu_c_plot
+pdu_c_plot
+
+plot_pdu <- pdu_plot/pdu_c_plot + plot_layout(guides = "collect")
+plot_pdu
+
+
+R_pdu_diff <- merge(rpdut, rpdu_ct, by  = "region")
+R_pdu_diff
+R_pdu_diff$diff <- R_pdu_diff$rpdu - R_pdu_diff$rpdu_c
+R_pdu_diff <- R_pdu_diff[ , -c(2:3)]
+
+L_pdu_diff <- merge(lpdut, lpdu_ct, by  = "region")
+L_pdu_diff
+L_pdu_diff$diff <- L_pdu_diff$lpdu - L_pdu_diff$lpdu_c
+L_pdu_diff <- L_pdu_diff[ , -c(2:3)]
+
+# Difference plot
+# Right hemisphere
+r_pdu_diff_plot <- ggseg(.data = R_pdu_diff, colour = "black", 
+                         mapping = aes(fill = diff), 
+                         position = "stacked", hemisphere = "right") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(R_pdu_diff$diff)) +
+  labs(title = NULL, fill = "Cortical thickness difference") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right",
+        legend.direction = "vertical")
+r_pdu_diff_plot
+
+
+
+# Left hemisphere
+l_pdu_diff_plot <- ggseg(.data = L_pdu_diff, colour = "black", 
+                         mapping = aes(fill = diff), 
+                         position = "stacked", hemisphere = "left") +
+  theme_void() +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_fill_gradient2(low = "white", mid = "goldenrod", high = "firebrick", midpoint = median(R_pdu_diff$diff)) +
+  labs(title = NULL, fill = "Cortical thickness difference") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        legend.direction = "vertical")
+l_pdu_diff_plot
+
+pdu_diff_plot <- l_pdu_diff_plot + r_pdu_diff_plot
+pdu_diff_plot
+
+
+
+pdu_2 <- final[ , c(1:9 , 21)]
+pdu_2$pdu <- ifelse(pdu_2$pdu == "TRUE", "pdu", "Control")
+
+colors <- c("Control" = "dodgerblue", "pdu" = "darkorange")
+
+
+pdu_2_long <- pdu_2 %>%
+  melt(id.vars = "pdu", measure.vars = c("rDLPFC", "rIC", "rOFC", "rACC"), 
+       variable.name = "Region", value.name = "Cortical_Thickness")
+pdu_2_long$pdu <- ifelse(pdu_2_long$pdu == "Control", "Control", "pdu")
+
+region_labels_r <- c("rDLPFC" = "Right DLPFC", 
+                     "rIC" = "Right IC", 
+                     "rOFC" = "Right OFC", 
+                     "rACC" = "Right ACC")
+
+region_labels_l <- c("lDLPFC" = "Left DLPFC", 
+                     "lIC" = "Left IC", 
+                     "lOFC" = "Left OFC", 
+                     "lACC" = "Left ACC")
+
+
+
+ggplot(pdu_2_long, aes(x = Cortical_Thickness, fill = pdu, color = pdu)) + 
+  ggdist::stat_halfeye(adjust = 0.5, justification = -0.3, .width = 0, alpha = 0.5, point_colour = NA) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.5) + 
+  scale_fill_manual(values = colors) + 
+  scale_color_manual(values = colors) +
+  labs(title = "Cortical thickness difference in the right hemisphere", 
+       x = "Cortical thickness", y = "Density of distribution", fill = "pdu") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  theme_classic() +
+  facet_wrap(~ Region, scales = "free_x", ncol = 2, labeller = as_labeller(region_labels_r)) + 
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 14, margin = margin(b = 2)))
+
+
+pdu_2_long_l <- pdu_2 %>%
+  melt(id.vars = "pdu", measure.vars = c("lDLPFC", "lIC", "lOFC", "lACC"), 
+       variable.name = "Region", value.name = "Cortical_Thickness")
+
+ggplot(pdu_2_long_l, aes(x = Cortical_Thickness, fill = pdu, color = pdu)) + 
+  ggdist::stat_halfeye(adjust = 0.5, justification = -0.3, .width = 0, alpha = 0.5, point_colour = NA) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.5) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  labs(title = "Cortical thickness difference in the left hemisphere", x = "Cortical thickness", y = "Density of distribution", fill = "pdu") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  theme_classic() +
+  facet_wrap(~ Region, scales = "free_x", ncol = 2, labeller = as_labeller(region_labels_l)) +
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 14, margin = margin(b = 2)))
