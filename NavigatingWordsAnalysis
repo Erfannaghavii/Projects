@@ -1,15 +1,23 @@
-# Importing datasets and cleaning
-library(readxl)
+# Running necessary library
 library(tidyverse)
 library(ppcor)
 library(tableone)
 library(gridExtra)
+library(readxl)
+library(multcomp)
+library(ggseg)
+library(ggseg3d)
+library(ggtext)
+library(grid)
+
+# Importing datasets and cleaning
+# Disease status
 status <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/status.csv")
 status <- subset(status, PATNO < 10000)
 status <- subset(status, COHORT_DEFINITION != "SWEDD")
 status <- status[ , c(1 , 3)]
 
-
+# Age
 age <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/age.csv")
 age <- subset(age, PATNO < 10000)
 age <- subset(age, EVENT_ID %in% c("BL", "SC", "V10"))
@@ -40,36 +48,36 @@ if (length(participants_SC_not_BL) > 0) {
 }
 age <- subset(age, EVENT_ID != "BL")
 
-
+# Demographics
 demo <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/demo.csv")
 demo <- subset(demo, PATNO < 10000)
 demo <- demo[ , c(2 , 10 , 19)]
 
-
+# Socioeconomic status
 ses <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/ses.csv")
 ses <- subset(ses, EVENT_ID == "SC")
 ses <- subset(ses, PATNO < 10000)
 ses <- ses[ , c(2 , 6)]
 
-
-moca <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/moca.csv")
-moca <- subset(moca, PATNO < 10000)
-moca <- subset(moca, EVENT_ID %in% c("BL", "SC", "V10"))
-moca <- moca[ , c(2 , 3 , 33)]
-
-
+# DaTScan
 dat <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/dat.csv")
 dat <- subset(dat, PATNO < 10000)
 dat <- subset(dat, EVENT_ID %in% c("BL", "SC", "V10"))
-dat <- dat[ , c(2 , 3 , 6 , 7 , 8 , 9 , 10 , 11)]
+dat <- dat[ , c(2 , 3 , 6 , 7 , 8 , 9)]
 
+# Semantic fluency
 sem <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/sem.csv")
 sem <- subset(sem, PATNO < 10000)
 sem <- subset(sem, EVENT_ID %in% c("BL", "SC", "V10"))
-sem <- sem[ , c(2 , 3 , 6 , 7 , 8)]
+sem <- sem[ , c(2 , 3 , 6 , 7 , 8, 11)]
 sem$EVENT_ID <- gsub("BL", "SC", sem$EVENT_ID)
 sem$fluency <- rowSums(sem[ , 3:5])
-            
+
+# PPMI Curated data (version 2024.12.11)
+ppmi <- read.csv("C:/Users/mehdi/Desktop/Projects/28 - Semantic FLuency and PD/Datasets/ppmi.csv")
+ppmi <- subset(ppmi, PATNO < 10000)
+ppmi <- subset(ppmi, EVENT_ID %in% c("BL", "SC", "V10"))
+ppmi$EVENT_ID <- gsub("BL", "SC", ppmi$EVENT_ID)
 
 
 # Merging data:
@@ -78,276 +86,1490 @@ final <- merge(final, ses, by = "PATNO", all = TRUE)
 final <- merge(final, demo, by = "PATNO", all = TRUE)
 final <- merge(final, dat, by = c("PATNO", "EVENT_ID"), all = TRUE)
 final <- merge(final, sem, by = c("PATNO", "EVENT_ID"), all = TRUE)
+final <- merge(final, ppmi, by = c("PATNO", "EVENT_ID"), all = TRUE)
 
 # Removing duplicates
 library(dplyr)
 final <- distinct(final)
-final2 <- na.omit(final)
+
+# Removing missing values for DaTScan and semantic fluency scores
+final <- final [ , -17]
+final <- final %>% 
+  filter(!is.na(DATSCAN_CAUDATE_R), !is.na(DATSCAN_CAUDATE_L), !is.na(DATSCAN_PUTAMEN_R),
+         !is.na(DATSCAN_PUTAMEN_L), !is.na(VLTANIM), !is.na(VLTVEG),
+         !is.na(VLTFRUIT), !is.na(DVT_SFTANIM), !is.na(fluency))
+
+# Creating sub-datasets
+# Baseline:
+final_SC <- subset(final, EVENT_ID == "SC")
+
+# 4th-year visit
+final_Y4 <- subset(final, EVENT_ID == "V10")
+
+# Converting categorical variables to factors:
+final_SC$HANDED <- as.factor(final_SC$HANDED)
+final_SC$SEX <- as.factor(final_SC$SEX)
+final_SC$NHY <- as.factor(final_SC$NHY)
+final_Y4$HANDED <- as.factor(final_Y4$HANDED)
+final_Y4$SEX <- as.factor(final_Y4$SEX)
+final_Y4$NHY <- as.factor(final_Y4$NHY)
+
+# Splitting datasets based on disease status:
+# Baseline:
+final_SC_PD <- subset(final_SC, COHORT_DEFINITION == "Parkinson's Disease")
+final_SC_HC <- subset(final_SC, COHORT_DEFINITION == "Healthy Control")
+
+# 4th-year
+final_Y4_PD <- subset(final_Y4, COHORT_DEFINITION == "Parkinson's Disease")
+final_Y4_HC <- subset(final_Y4, COHORT_DEFINITION == "Healthy Control")
+
+# Importing columns with non-normal distributions into a single variable:
+nonnormal <- colnames(final_SC)[c(3, 5, 8:23, 25:27)]
+
+# Tables
+table1 <- CreateTableOne(data = final_SC, strata = "COHORT_DEFINITION", test = TRUE)
+table1
+print(table1, nonnormal = nonnormal)
+print(table1)
+
+CreateTableOne(data = final_Y4_PD, test = TRUE)
+
+# Converting handedness data into dummy variables
+final_SC_PD$HANDED <- as.factor(final_SC_PD$HANDED)
+SC_PD <- model.matrix(~ HANDED -1 , data = final_SC_PD)
+final_SC_PD <- cbind(final_SC_PD, SC_PD)
+
+final_SC_HC$HANDED <- as.factor(final_SC_HC$HANDED)
+SC_HC <- model.matrix(~ HANDED - 1, data = final_SC_HC)
+final_SC_HC <- cbind(final_SC_HC, SC_HC)
+
+final_Y4_PD$HANDED <- as.factor(final_Y4_PD$HANDED)
+Y4_PD <- model.matrix(~ HANDED -1 , data = final_Y4_PD)
+final_Y4_PD <- cbind(final_Y4_PD, Y4_PD)
+
+final_SC_PD$SEX <- as.numeric(final_SC_PD$SEX)
+final_SC_HC$SEX <- as.numeric(final_SC_HC$SEX)
+final_Y4_PD$SEX <- as.numeric(final_Y4_PD$SEX)
+
+# Correlation analysis for PD patients at baseline
+# (Change variables based on your correlation)
+dat <- matrix(NA, nrow = 4, ncol = 5)
+
+for (i in 1:4) {
+  for (j in 1:5){
+    final_SC_PD_cor <- final_SC_PD[ , c(3, 5, 6, i+7, j+11, 31, 32)]
+    a <- pcor(final_SC_PD_cor, method = "kendall")
+    dat[i,j] <- a$estimate[26]
+  }
+}
+
+b <- as.data.frame(as.vector(dat))
+class(b)
+num <- b[ , 1]
+b$fdr <- p.adjust(num, method = "fdr")
 
 
-final2_SC <- subset(final2, EVENT_ID == "SC")
-final2_Y4 <- subset(final2, EVENT_ID == "V10")
 
-final2_SC_HC <- subset(final2_SC, COHORT_DEFINITION == "Healthy Control")
-final2_Y4_HC <- subset(final2_Y4, COHORT_DEFINITION == "Healthy Control")
-final2_SC_PD <- subset(final2_SC, COHORT_DEFINITION == "Parkinson's Disease")
-final2_Y4_PD <- subset(final2_Y4, COHORT_DEFINITION == "Parkinson's Disease")
-
-# Now the dataset is ready!
-
-# Screening: Parkinsons's Disease
-# Right caudate * (No)
-cor_SC_anim_rc_pd <- cor.test(final2_SC_PD$fluency, final2_SC_PD$DATSCAN_CAUDATE_R, method = "kendall")
-cor_SC_anim_rc_pd
-
-# Left caudate
-cor_SC_anim_lc_pd <- cor.test(final2_SC_PD$fluency, final2_SC_PD$DATSCAN_CAUDATE_L, method = "kendall")
-cor_SC_anim_lc_pd
-
-# Right putamen
-cor_SC_anim_rp_pd <- cor.test(final2_SC_PD$fluency, final2_SC_PD$DATSCAN_PUTAMEN_R, method = "kendall")
-cor_SC_anim_rp_pd
-
-# Left putamen
-cor_SC_anim_lp_pd <- cor.test(final2_SC_PD$fluency, final2_SC_PD$DATSCAN_PUTAMEN_L, method = "kendall")
-cor_SC_anim_lp_pd
-
-# Right anterior putamen * (No)
-cor_SC_anim_rap_pd <- cor.test(final2_SC_PD$fluency, final2_SC_PD$DATSCAN_PUTAMEN_R_ANT, method = "kendall")
-cor_SC_anim_rap_pd
-
-# Left anterior putamen
-cor_SC_anim_lap_pd <- cor.test(final2_SC_PD$fluency, final2_SC_PD$DATSCAN_PUTAMEN_L_ANT, method = "kendall")
-cor_SC_anim_lap_pd
-
-
-
-# Screening: Healthy Control
-# Right caudate
-cor_SC_anim_rc_hc <- cor.test(final2_SC_HC$fluency, final2_SC_HC$DATSCAN_CAUDATE_R, method = "kendall")
-cor_SC_anim_rc_hc
-
-# Left caudate * (No)
-cor_SC_anim_lc_hc <- cor.test(final2_SC_HC$fluency, final2_SC_HC$DATSCAN_CAUDATE_L, method = "kendall")
-cor_SC_anim_lc_hc
-
-# Right putamen * (No)
-cor_SC_anim_rp_hc <- cor.test(final2_SC_HC$fluency, final2_SC_HC$DATSCAN_PUTAMEN_R, method = "kendall")
-cor_SC_anim_rp_hc
-
-# Left putamen
-cor_SC_anim_lp_hc <- cor.test(final2_SC_HC$fluency, final2_SC_HC$DATSCAN_PUTAMEN_L, method = "kendall")
-cor_SC_anim_lp_hc
-
-# Right anterior putamen
-cor_SC_anim_rap_hc <- cor.test(final2_SC_HC$fluency, final2_SC_HC$DATSCAN_PUTAMEN_R_ANT, method = "kendall")
-cor_SC_anim_rap_hc
-
-# Left anterior putamen
-cor_SC_anim_lap_hc <- cor.test(final2_SC_HC$fluency, final2_SC_HC$DATSCAN_PUTAMEN_L_ANT, method = "kendall")
-cor_SC_anim_lap_hc
-
-
-
-# 4th year: Parkinsons's Disease
-# Right caudate * (No)
-cor_Y4_anim_rc_pd <- cor.test(final2_Y4_PD$fluency, final2_Y4_PD$DATSCAN_CAUDATE_R, method = "kendall")
-cor_Y4_anim_rc_pd
-
-# Left caudate * (No)
-cor_Y4_anim_lc_pd <- cor.test(final2_Y4_PD$fluency, final2_Y4_PD$DATSCAN_CAUDATE_L, method = "kendall")
-cor_Y4_anim_lc_pd
-
-# Right putamen * (Yes!)
-cor_Y4_anim_rp_pd <- cor.test(final2_Y4_PD$fluency, final2_Y4_PD$DATSCAN_PUTAMEN_R, method = "kendall")
-cor_Y4_anim_rp_pd
-
-# Left putamen * (Yes!)
-cor_Y4_anim_lp_pd <- cor.test(final2_Y4_PD$fluency, final2_Y4_PD$DATSCAN_PUTAMEN_L, method = "kendall")
-cor_Y4_anim_lp_pd
-
-# Right anterior putamen * (Yes!) 
-cor_Y4_anim_rap_pd <- cor.test(final2_Y4_PD$fluency, final2_Y4_PD$DATSCAN_PUTAMEN_R_ANT, method = "kendall")
-cor_Y4_anim_rap_pd
-
-# Left anterior putamen * (No) 
-cor_Y4_anim_lap_pd <- cor.test(final2_Y4_PD$fluency, final2_Y4_PD$DATSCAN_PUTAMEN_L_ANT, method = "kendall")
-cor_Y4_anim_lap_pd
-
-
-# final2_SC_PD_red <- final2_SC_PD[ , c(3, 5, 6, 7, 17, 8)]
-# final2_SC_HC_red <- final2_SC_HC[ , c(3, 5, 6, 7, 17, 10)]
-final2_Y4_PD_red <- final2_Y4_PD[ , c(3, 5, 6, 7, 13, 17)]
-
-# pc1 <- pcor(final2_SC_PD_red, method = "kendall")
-# pc1
-# 
-# pc2 <- pcor(final2_SC_HC_red, method = "kendall")
-# pc2
-
-pc3 <- pcor(final2_Y4_PD_red, method = "kendall")
-pc3
-
-final2_SC$SEX <- as.factor(final2_SC$SEX)
-final2_Y4$SEX <- as.factor(final2_Y4$SEX)
-
-final2_SC$HANDED <- as.factor(final2_SC$HANDED)
-final2_Y4$HANDED <- as.factor(final2_Y4$HANDED)
-
-
-table_SC <- CreateTableOne(data = final2_SC, strata = "COHORT_DEFINITION")
-table_SC
-
-table_Y4 <- CreateTableOne(data = final2_Y4, strata = "COHORT_DEFINITION")
-table_Y4
-
-
-plot1 <- ggplot(final2_Y4_PD, aes(x = DATSCAN_CAUDATE_R, y = fluency)) +
-  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 0.5) + # Use shape and fill for points
-  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
-  labs(title = "Right caudate",
-       x = "Right caudate dopaminergic function",
-       y = "Semantic fluency") +
-  theme_classic() + # Classic theme
+# Creating plots
+plot1 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_R, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.122,        p < 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
   theme(
     legend.position = "top",
-    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"), # Center and style the title
-    axis.title.x = element_text(size = 8, face = "bold"), # Style x-axis title
-    axis.title.y = element_text(size = 8, face = "bold"), # Style y-axis title
-    axis.text.x = element_text(size = 10), # Style x-axis text
-    axis.text.y = element_text(size = 10), # Style y-axis text
-    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
-    panel.grid.minor = element_blank() # Remove minor grid lines
-  ) + 
-  annotate("text", x = max(final2_Y4_PD$DATSCAN_CAUDATE_R) * 0.685, y = max(final2_Y4_PD$fluency) * 0.85,
-           label = paste("Kendall's tau:", "0.075", "\np-value:", "0.588"),
-           size = 4.5, hjust=0)
-
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
 plot1
 
 
-
-plot2 <- ggplot(final2_Y4_PD, aes(x = DATSCAN_CAUDATE_L, y = fluency)) +
-  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 0.5) + # Use shape and fill for points
-  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
-  labs(title = "Left caudate",
-       x = "Left caudate dopaminergic function",
-       y = "Semantic fluency") +
-  theme_classic() + # Classic theme
+plot2 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_L, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = 0.100,        p < 0.05</span>",
+       x = NULL,
+       y = "Animal category semantic fluency") +
+  theme_classic() +
   theme(
     legend.position = "top",
-    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"), # Center and style the title
-    axis.title.x = element_text(size = 8, face = "bold"), # Style x-axis title
-    axis.title.y = element_text(size = 8, face = "bold"), # Style y-axis title
-    axis.text.x = element_text(size = 10), # Style x-axis text
-    axis.text.y = element_text(size = 10), # Style y-axis text
-    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
-    panel.grid.minor = element_blank() # Remove minor grid lines
-  ) + 
-  annotate("text", x = max(final2_Y4_PD$DATSCAN_CAUDATE_L) * 0.65, y = max(final2_Y4_PD$fluency) * 0.85,
-           label = paste("Kendall's tau:", "0.076", "\np-value:", "0.553"),
-           size = 4.5, hjust=0)
-
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
 plot2
 
+plot1_2 <- grid.arrange(plot2, plot1, nrow = 1, bottom = text)
 
 
-plot3 <- ggplot(final2_Y4_PD, aes(x = DATSCAN_PUTAMEN_R, y = fluency)) +
-  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 0.5) + # Use shape and fill for points
-  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
-  labs(title = "Right putamen",
-       x = "Right putamen dopaminergic function",
-       y = "Semantic fluency") +
-  theme_classic() + # Classic theme
+plot3 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_R, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.109,        p < 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
   theme(
     legend.position = "top",
-    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"), # Center and style the title
-    axis.title.x = element_text(size = 8, face = "bold"), # Style x-axis title
-    axis.title.y = element_text(size = 8, face = "bold"), # Style y-axis title
-    axis.text.x = element_text(size = 10), # Style x-axis text
-    axis.text.y = element_text(size = 10), # Style y-axis text
-    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
-    panel.grid.minor = element_blank() # Remove minor grid lines
-  ) + 
-  annotate("text", x = max(final2_Y4_PD$DATSCAN_PUTAMEN_R) * 0.65, y = max(final2_Y4_PD$fluency) * 0.85,
-           label = paste("Kendall's tau:", "0.117", "\np-value:", "0.003"),
-           size = 4.5, hjust=0)
-
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
 plot3
 
 
-plot4 <- ggplot(final2_Y4_PD, aes(x = DATSCAN_PUTAMEN_L, y = fluency)) +
-  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 0.5) + # Use shape and fill for points
-  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
-  labs(title = "Left putamen",
-       x = "Left putamen dopaminergic function",
-       y = "Semantic fluency") +
-  theme_classic() + # Classic theme
+plot4 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_L, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = 0.099,        p < 0.05</span>",
+       x = NULL,
+       y = "Derived semantic fluency animal T-score") +
+  theme_classic() +
   theme(
     legend.position = "top",
-    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"), # Center and style the title
-    axis.title.x = element_text(size = 8, face = "bold"), # Style x-axis title
-    axis.title.y = element_text(size = 8, face = "bold"), # Style y-axis title
-    axis.text.x = element_text(size = 10), # Style x-axis text
-    axis.text.y = element_text(size = 10), # Style y-axis text
-    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
-    panel.grid.minor = element_blank() # Remove minor grid lines
-  ) + 
-  annotate("text", x = max(final2_Y4_PD$DATSCAN_PUTAMEN_L) * 0.65, y = max(final2_Y4_PD$fluency) * 0.85,
-           label = paste("Kendall's tau:", "0.084", "\np-value:", "0.033"),
-           size = 4.5, hjust=0)
-
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
 plot4
 
 
+plot3_4 <- grid.arrange(plot4, plot3, nrow = 1, bottom = text)
 
 
-plot5 <- ggplot(final2_Y4_PD, aes(x = DATSCAN_PUTAMEN_R_ANT, y = fluency)) +
-  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 0.5) + # Use shape and fill for points
-  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
-  labs(title = "Right anterior putamen",
-       x = "Right putamen dopaminergic function",
-       y = "Semantic fluency") +
-  theme_classic() + # Classic theme
+plot5 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_R, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.118,        p < 0.05</span>",
+       x = "Right putamen DaTScan SBR",
+       y = "Total semantic fluency score") +
+  theme_classic() +
   theme(
     legend.position = "top",
-    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"), # Center and style the title
-    axis.title.x = element_text(size = 8, face = "bold"), # Style x-axis title
-    axis.title.y = element_text(size = 8, face = "bold"), # Style y-axis title
-    axis.text.x = element_text(size = 10), # Style x-axis text
-    axis.text.y = element_text(size = 10), # Style y-axis text
-    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
-    panel.grid.minor = element_blank() # Remove minor grid lines
-  ) + 
-  annotate("text", x = max(final2_Y4_PD$DATSCAN_PUTAMEN_R_ANT) * 0.65, y = max(final2_Y4_PD$fluency) * 0.85,
-           label = paste("Kendall's tau:", "0.108", "\np-value:", "0.006"),
-           size = 4.5, hjust=0)
-
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
 plot5
 
 
-plot6 <- ggplot(final2_Y4_PD, aes(x = DATSCAN_PUTAMEN_L_ANT, y = fluency)) +
-  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 0.5) + # Use shape and fill for points
-  geom_smooth(method = 'lm', se = FALSE, color = "darkred", linetype = "dashed", size = 1.5) + # Customize the regression line
-  labs(title = "Left anterior putamen",
-       x = "Left anterior putamen dopaminergic function",
-       y = "Semantic fluency") +
-  theme_classic() + # Classic theme
+text <- textGrob("DaTScan SBR", gp = gpar(fontsize = 14))
+
+
+
+
+
+plot6 <- ggplot(final_SC_HC, aes(x = DATSCAN_CAUDATE_R, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.010,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
   theme(
     legend.position = "top",
-    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"), # Center and style the title
-    axis.title.x = element_text(size = 8, face = "bold"), # Style x-axis title
-    axis.title.y = element_text(size = 8, face = "bold"), # Style y-axis title
-    axis.text.x = element_text(size = 10), # Style x-axis text
-    axis.text.y = element_text(size = 10), # Style y-axis text
-    panel.grid.major = element_line(color = "grey80", linetype = "dotted"), # Customize grid lines
-    panel.grid.minor = element_blank() # Remove minor grid lines
-  ) + 
-  annotate("text", x = max(final2_Y4_PD$DATSCAN_PUTAMEN_L_ANT) * 0.65, y = max(final2_Y4_PD$fluency) * 0.85,
-           label = paste("Kendall's tau:", "0.069", "\np-value:", "0.079"),
-           size = 4.5, hjust=0)
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
 
 plot6
 
 
-plot7 <- grid.arrange(plot1, plot3, plot5, plot2, plot4, plot6, nrow=2)
+plot7 <- ggplot(final_SC_HC, aes(x = DATSCAN_CAUDATE_L, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.019,        p > 0.05</span>",
+       x = NULL,
+       y = "Animal category semantic fluency") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot7
+
+
+plot8 <- ggplot(final_SC_HC, aes(x = DATSCAN_PUTAMEN_R, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.065,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot8
+
+
+plot9 <- ggplot(final_SC_HC, aes(x = DATSCAN_PUTAMEN_L, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ < 0.001,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot9
+
+
+grid.arrange(plot7, plot6, plot9, plot8, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+plot10 <- ggplot(final_SC_HC, aes(x = DATSCAN_CAUDATE_R, y = VLTVEG)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.009,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot10
+
+
+plot11 <- ggplot(final_SC_HC, aes(x = DATSCAN_CAUDATE_L, y = VLTVEG)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.032,        p > 0.05</span>",
+       x = NULL,
+       y = "Vegetable category semantic fluency") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot11
+
+
+plot12 <- ggplot(final_SC_HC, aes(x = DATSCAN_PUTAMEN_R, y = VLTVEG)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.020,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot12
+
+
+plot13 <- ggplot(final_SC_HC, aes(x = DATSCAN_PUTAMEN_L, y = VLTVEG)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = 0.021,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot13
+
+
+grid.arrange(plot11, plot10, plot13, plot12, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+plot14 <- ggplot(final_SC_HC, aes(x = DATSCAN_CAUDATE_R, y = VLTFRUIT)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.043,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot14
+
+
+plot15 <- ggplot(final_SC_HC, aes(x = DATSCAN_CAUDATE_L, y = VLTFRUIT)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.082,        p > 0.05</span>",
+       x = NULL,
+       y = "Fruit category semantic fluency") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot15
+
+
+plot16 <- ggplot(final_SC_HC, aes(x = DATSCAN_PUTAMEN_R, y = VLTFRUIT)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.114,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot16
+
+
+plot17 <- ggplot(final_SC_HC, aes(x = DATSCAN_PUTAMEN_L, y = VLTFRUIT)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = 0.084,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot17
+
+
+grid.arrange(plot15, plot14, plot17, plot16, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+plot18 <- ggplot(final_SC_HC, aes(x = DATSCAN_CAUDATE_R, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = -0.008,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot18
+
+
+plot19 <- ggplot(final_SC_HC, aes(x = DATSCAN_CAUDATE_L, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.001,        p > 0.05</span>",
+       x = NULL,
+       y = "Derived semantic fluency animal T-score") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot19
+
+
+plot20 <- ggplot(final_SC_HC, aes(x = DATSCAN_PUTAMEN_R, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.042,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot20
+
+
+plot21 <- ggplot(final_SC_HC, aes(x = DATSCAN_PUTAMEN_L, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = -0.019,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot21
+
+
+grid.arrange(plot19, plot18, plot21, plot20, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+
+
+
+plot22 <- ggplot(final_SC_HC, aes(x = DATSCAN_CAUDATE_R, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.030,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot22
+
+
+plot23 <- ggplot(final_SC_HC, aes(x = DATSCAN_CAUDATE_L, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.055,        p > 0.05</span>",
+       x = NULL,
+       y = "Total semantic fluency score") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot23
+
+
+plot24 <- ggplot(final_SC_HC, aes(x = DATSCAN_PUTAMEN_R, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.086,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot24
+
+
+plot25 <- ggplot(final_SC_HC, aes(x = DATSCAN_PUTAMEN_L, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = 0.044,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot25
+
+
+grid.arrange(plot23, plot22, plot25, plot24, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ===========================================================
+
+
+
+
+plot26 <- ggplot(final_SC_PD, aes(x = DATSCAN_CAUDATE_R, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.020,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot26
+
+
+plot27 <- ggplot(final_SC_PD, aes(x = DATSCAN_CAUDATE_L, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.002,        p > 0.05</span>",
+       x = NULL,
+       y = "Animal category semantic fluency") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot27
+
+
+plot28 <- ggplot(final_SC_PD, aes(x = DATSCAN_PUTAMEN_R, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.052,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot28
+
+
+plot29 <- ggplot(final_SC_PD, aes(x = DATSCAN_PUTAMEN_L, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = -0.011,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot29
+
+
+grid.arrange(plot27, plot26, plot29, plot28, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+plot30 <- ggplot(final_SC_PD, aes(x = DATSCAN_CAUDATE_R, y = VLTVEG)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.041,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot30
+
+
+plot31 <- ggplot(final_SC_PD, aes(x = DATSCAN_CAUDATE_L, y = VLTVEG)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.018,        p > 0.05</span>",
+       x = NULL,
+       y = "Vegetable category semantic fluency") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot31
+
+
+plot32 <- ggplot(final_SC_PD, aes(x = DATSCAN_PUTAMEN_R, y = VLTVEG)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.025,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot32
+
+
+plot33 <- ggplot(final_SC_PD, aes(x = DATSCAN_PUTAMEN_L, y = VLTVEG)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = -0.016,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot33
+
+
+grid.arrange(plot31, plot30, plot33, plot32, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+plot34 <- ggplot(final_SC_PD, aes(x = DATSCAN_CAUDATE_R, y = VLTFRUIT)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.071,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot34
+
+
+plot35 <- ggplot(final_SC_PD, aes(x = DATSCAN_CAUDATE_L, y = VLTFRUIT)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.045,        p > 0.05</span>",
+       x = NULL,
+       y = "Fruit category semantic fluency") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot35
+
+
+plot36 <- ggplot(final_SC_PD, aes(x = DATSCAN_PUTAMEN_R, y = VLTFRUIT)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.059,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot36
+
+
+plot37 <- ggplot(final_SC_PD, aes(x = DATSCAN_PUTAMEN_L, y = VLTFRUIT)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = -0.001,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot37
+
+
+grid.arrange(plot35, plot34, plot37, plot36, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+plot38 <- ggplot(final_SC_PD, aes(x = DATSCAN_CAUDATE_R, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = -0.004,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot38
+
+
+plot39 <- ggplot(final_SC_PD, aes(x = DATSCAN_CAUDATE_L, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = -0.027,        p > 0.05</span>",
+       x = NULL,
+       y = "Derived semantic fluency animal T-score") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot39
+
+
+plot40 <- ggplot(final_SC_PD, aes(x = DATSCAN_PUTAMEN_R, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.027,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot40
+
+
+plot41 <- ggplot(final_SC_PD, aes(x = DATSCAN_PUTAMEN_L, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = -0.036,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot41
+
+
+grid.arrange(plot39, plot38, plot41, plot40, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+
+
+
+plot42 <- ggplot(final_SC_PD, aes(x = DATSCAN_CAUDATE_R, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.051,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot42
+
+
+plot43 <- ggplot(final_SC_PD, aes(x = DATSCAN_CAUDATE_L, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.024,        p > 0.05</span>",
+       x = NULL,
+       y = "Total semantic fluency score") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot43
+
+
+plot44 <- ggplot(final_SC_PD, aes(x = DATSCAN_PUTAMEN_R, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.058,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot44
+
+
+plot45 <- ggplot(final_SC_PD, aes(x = DATSCAN_PUTAMEN_L, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = -0.012,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot45
+
+
+grid.arrange(plot43, plot42, plot45, plot44, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ===========================================================
+
+
+
+
+plot46 <- ggplot(final_Y4_PD, aes(x = DATSCAN_CAUDATE_R, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.072,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot46
+
+
+plot47 <- ggplot(final_Y4_PD, aes(x = DATSCAN_CAUDATE_L, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.085,        p > 0.05</span>",
+       x = NULL,
+       y = "Animal category semantic fluency") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot47
+
+
+plot48 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_R, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.122,        p < 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot48
+
+
+plot49 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_L, y = VLTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = 0.100,        p < 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot49
+
+
+grid.arrange(plot47, plot46, plot49, plot48, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+plot50 <- ggplot(final_Y4_PD, aes(x = DATSCAN_CAUDATE_R, y = VLTVEG)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.041,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot50
+
+
+plot51 <- ggplot(final_Y4_PD, aes(x = DATSCAN_CAUDATE_L, y = VLTVEG)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.016,        p > 0.05</span>",
+       x = NULL,
+       y = "Vegetable category semantic fluency") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot51
+
+
+plot52 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_R, y = VLTVEG)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.063,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot52
+
+
+plot53 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_L, y = VLTVEG)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = 0.040,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot53
+
+
+grid.arrange(plot51, plot50, plot53, plot52, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+plot54 <- ggplot(final_Y4_PD, aes(x = DATSCAN_CAUDATE_R, y = VLTFRUIT)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.075,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot54
+
+
+plot55 <- ggplot(final_Y4_PD, aes(x = DATSCAN_CAUDATE_L, y = VLTFRUIT)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.076,        p > 0.05</span>",
+       x = NULL,
+       y = "Fruit category semantic fluency") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot55
+
+
+plot56 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_R, y = VLTFRUIT)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.093,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot56
+
+
+plot57 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_L, y = VLTFRUIT)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = 0.083,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot57
+
+
+grid.arrange(plot55, plot54, plot57, plot56, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+plot58 <- ggplot(final_Y4_PD, aes(x = DATSCAN_CAUDATE_R, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.062,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot58
+
+
+plot59 <- ggplot(final_Y4_PD, aes(x = DATSCAN_CAUDATE_L, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.070,        p > 0.05</span>",
+       x = NULL,
+       y = "Derived semantic fluency animal T-score") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot59
+
+
+plot60 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_R, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.109,        p < 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot60
+
+
+plot61 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_L, y = DVT_SFTANIM)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = 0.099,        p < 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot61
+
+
+grid.arrange(plot59, plot58, plot61, plot60, nrow = 1, bottom = text)
+
+
+
+
+
+
+
+
+
+
+plot62 <- ggplot(final_Y4_PD, aes(x = DATSCAN_CAUDATE_R, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right caudate<br><span style='font-size:15pt;'>τ = 0.076,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+
+plot62
+
+
+plot63 <- ggplot(final_Y4_PD, aes(x = DATSCAN_CAUDATE_L, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left caudate<br><span style='font-size:15pt;'>τ = 0.076,        p > 0.05</span>",
+       x = NULL,
+       y = "Total semantic fluency score") +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot63
+
+
+plot64 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_R, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Right putamen<br><span style='font-size:15pt;'>τ = 0.118,        p < 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot64
+
+
+plot65 <- ggplot(final_Y4_PD, aes(x = DATSCAN_PUTAMEN_L, y = fluency)) +
+  geom_point(size = 2, shape = 21, fill = "blue", color = "black", alpha = 1) +
+  geom_smooth(method = 'lm', se = FALSE, color = "darkred", size = 1.5) +
+  labs(title = "Left putamen<br><span style='font-size:15pt;'>τ = 0.088,        p > 0.05</span>",
+       x = NULL,
+       y = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_markdown(hjust = 0.5, size = 20),
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+plot65
+
+
+grid.arrange(plot63, plot62, plot65, plot64, nrow = 1, bottom = text)
+
+
+
+# Correlation analysis between changes in semantic fluency and DaTScan SBR over 4 years
+
+Y4 <- merge(final_SC_PD[, c(1, 3, 5, 6, 8:16, 30:32)], final_Y4_PD[ , c(1, 8:16)], by = "PATNO")
+Y4$DATSCAN_CAUDATE_R_del <- Y4$DATSCAN_CAUDATE_R.y - Y4$DATSCAN_CAUDATE_R.x
+Y4$DATSCAN_CAUDATE_L_del <- Y4$DATSCAN_CAUDATE_L.y - Y4$DATSCAN_CAUDATE_L.x
+Y4$DATSCAN_PUTAMEN_R_del <- Y4$DATSCAN_PUTAMEN_R.y - Y4$DATSCAN_PUTAMEN_R.x
+Y4$DATSCAN_PUTAMEN_L_del <- Y4$DATSCAN_PUTAMEN_L.y - Y4$DATSCAN_PUTAMEN_L.x
+Y4$VLTANIM_del <- Y4$VLTANIM.y - Y4$VLTANIM.x
+Y4$VLTVEG_del <- Y4$VLTVEG.y - Y4$VLTVEG.x
+Y4$VLTFRUIT_del <- Y4$VLTFRUIT.y - Y4$VLTFRUIT.x
+Y4$DVT_SFTANIM_del <- Y4$DVT_SFTANIM.y - Y4$DVT_SFTANIM.x
+Y4$fluency_del <- Y4$fluency.y - Y4$fluency.x
+Y4 <- Y4[ , c(1:4, 14:16, 26:34)]
+
+det <- data.frame()
+
+for (i in 1:4) {
+  for (j in 1:5){
+    final_Y4_cor <- Y4[ , c(2, 3, 4, 6, 7, i+7, j+11)]
+    a <- pcor(final_Y4_cor, method = "kendall")
+    det[i,j] <- a$p.value[42]
+  }
+}
+
+c <- as.vector(as.matrix(det))
+class(c)
+d <- p.adjust(c, method = "fdr")
+d <- cbind(c, d)
