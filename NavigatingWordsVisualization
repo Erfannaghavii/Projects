@@ -1,0 +1,26 @@
+pip install nilearn
+from nilearn import datasets, plotting
+from nilearn.image import math_img
+
+atlas = datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr25-1mm')
+
+left_putamen_index = [i for i, label in enumerate(atlas.labels) if "Left Putamen" in label][0]
+right_putamen_index = [i for i, label in enumerate(atlas.labels) if "Right Putamen" in label][0]
+
+putamen_mask = math_img(
+    "(img == {0}) * 0.1 + (img == {1}) * 0.122".format(left_putamen_index, right_putamen_index),
+    img=atlas.maps
+)
+
+plotting.plot_glass_brain(
+    putamen_mask, 
+    colorbar=True, 
+    threshold=0,
+    cmap="coolwarm",
+    plot_abs=False,
+    display_mode='lyrz',
+    vmin=0,
+    vmax=0.13
+)
+
+plotting.show()
