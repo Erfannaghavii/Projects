@@ -4,7 +4,7 @@ library(readxl)
 library(ggplot2)
 library(lme4)
 library(dplyr)
-# library(lmerTest)
+library(lmerTest)
 library(pbkrtest)
 library(maps)
 library(afex)
@@ -20,7 +20,6 @@ Finaldataset_MPH$income<- as.factor(Finaldataset_MPH$income)
 Finaldataset_MPH$hdi<- as.numeric(Finaldataset_MPH$hdi)
 Finaldataset_MPH$income <- relevel(Finaldataset_MPH$income, ref = "Low-income countries")
 
-
 a <- numeric(nrow(Finaldataset_MPH))
 b <- numeric(nrow(Finaldataset_MPH))
 c <- numeric(nrow(Finaldataset_MPH))
@@ -33,20 +32,28 @@ for (i in 1:nrow(Finaldataset_MPH)) {
   
 }
 
-# Dataset names
+# Modifying dataset names
 names(Finaldataset_MPH)
-
 Finaldataset_MPH <- Finaldataset_MPH[ , -c(7 , 8 ,  9 , 11  ,12 , 13)]
-
 names <- c("location" , "year", "daly", "pop65", "lit15", "popm", "death", "population",
            "hdi","income","death_pop", "daly_pop")
-
 colnames(Finaldataset_MPH) <- names
 
+# pm25 <- read.csv("C:/Users/mehdi/Desktop/Projects/12 - MPH proposal (Ongoing)/pm25.csv")
+# colnames(pm25)[1] <- "location"
+# 
+# pm25$location <- tolower(pm25$location)
+# 
+# data2019 <- subset(Finaldataset_MPH, year == 2019)
+# 
+# data_table <- merge(data2019, pm25, by = "location")
+# 
+# write.csv(data_table, "data_table.csv")
+
 # Scaling continuous variables
-Finaldataset_MPH2 <- Finaldataset_MPH %>%
-  mutate(across(c(daly, pop65, lit15, popm, death,
-                  hdi, death_pop, daly_pop), scale))
+# # Finaldataset_MPH2 <- Finaldataset_MPH %>%
+#   mutate(across(c(daly, pop65, lit15, popm, death,
+#                   hdi, death_pop, daly_pop), scale))
 
 # LMEM on not-scaled data: Transforming using logarithms
 # model1 <- lmer(log(death_pop) ~ 1 + popm + pop65 + year + income  + hdi + (1 + year | location) , data=Finaldataset_MPH )
@@ -89,7 +96,7 @@ Finaldataset_MPH2 <- Finaldataset_MPH %>%
 # model7_2 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi +
 #                  (1 + year | location),
 #                data=Finaldataset_MPH2,
-               # control = lmerControl(optimizer = "Nelder_Mead"))
+# control = lmerControl(optimizer = "Nelder_Mead"))
 
 # # Increasing the number of iterations
 # model4_3 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi +
@@ -102,11 +109,19 @@ Finaldataset_MPH2 <- Finaldataset_MPH %>%
 #                  data=Finaldataset_MPH2,
 #                  control = lmerControl(optCtr = list(maxfun = 1e9)))
 
-# Removing some of the derivative calculations
-model4_4 <- lmer(death_pop ~ 1 + popm + pop65 + income  + hdi +
+# LMEM model
+model4_4 <- lmer(log(daly_pop) ~ 1 + popm + pop65 + income + year + hdi +
                    (1 + year | location),
                  data=Finaldataset_MPH,
                  control = lmerControl(calc.derivs = FALSE))
+
+summary(model4_4)
+
+model4_4_2 <- lmer(log(daly_pop) ~ 1 + popm + pop65 + year + hdi +
+                     (1 + year | location),
+                   data=Finaldataset_MPH,
+                   control = lmerControl(calc.derivs = FALSE))
+anova(model4_4_2, model4_4)
 
 # model7_4 <- lmer(death_pop ~ 1 + popm + pop65 + year + income  + hdi +
 #                    (1 + year | location),
@@ -125,17 +140,14 @@ model4_4 <- lmer(death_pop ~ 1 + popm + pop65 + income  + hdi +
 #                  control = lmerControl(calc.derivs = FALSE))
 
 
-
-summary(model4_4)
-
 # Doing likelihood-ratio test:
 model4_4_2 <- lmer(death_pop ~ 1 + popm + pop65 + hdi +
-                                 (1 + year | location),
-                               data=Finaldataset_MPH,
-                               control = lmerControl(calc.derivs = FALSE))
+                     (1 + year | location),
+                   data=Finaldataset_MPH,
+                   control = lmerControl(calc.derivs = FALSE))
 anova(model4_4_2, model4_4)
 
-
+# DALY LMEM test
 model1_1 <- lmer(daly_pop ~ 1 + popm + pop65 + income  + hdi +
                    (1 + year | location),
                  data=Finaldataset_MPH,
@@ -158,7 +170,7 @@ summary(model1_1)
 # summary(lht)
 
 # Creating descriptive statistics
-desc1 <- CreateTableOne(data = Finaldataset_MPH, strata = "income",
+desc1 <- CreateTableOne(data = Finaldataset_MPH,
                         vars = c("death_pop", "popm", "pop65", "daly_pop"))
 desc1
 
@@ -194,13 +206,68 @@ plot2 <- ggplot(mean_death_pop, aes(x = income, y = mean_death_pop, fill = incom
 plot2
 
 
-plot3 <- ggplot(Finaldataset_MPH, aes(x = year, y = (death_pop/191), fill = year)) +
-  geom_bar(stat = "identity") +
-  labs(title = NULL, x = NULL, y = "Mean death per 1 million population per each country") +
-  theme_classic() +
-  theme(legend.position = "none") +
-  theme(axis.text.x = element_text(size = 12, color = "black"),
-        axis.text.y = element_text(size = 12, color = "black"))
+# Aggregate mean death_pop across 191 countries (using dplyr for simplicity)
+mean_data <- Finaldataset_MPH %>%
+  group_by(year) %>%
+  summarise(mean_death_pop = mean(death_pop, na.rm = TRUE)) %>%
+  mutate(type = "World")  # Label for mean
+
+# Define EMRO countries
+emro_countries <- c("afghanistan", "bahrain", "djibouti", "egypt, arab rep.", 
+                    "iran, islamic rep.", "iraq", "jordan", "kuwait", "lebanon", 
+                    "libya", "morocco", "pakistan", "west bank and gaza", "israel", 
+                    "oman", "qatar", "saudi arabia", "south sudan", "sudan", 
+                    "syrian arab republic", "tunisia", "united arab emirates", 
+                    "yemen, rep.")
+
+# Extract EMRO data using base R
+emro_data <- subset(Finaldataset_MPH, location %in% emro_countries)  # Filter EMRO countries
+emro_data <- aggregate(death_pop ~ year, data = emro_data, mean, na.rm = TRUE)  # Mean per year
+colnames(emro_data)[colnames(emro_data) == "death_pop"] <- "mean_death_pop"  # Rename
+emro_data <- transform(emro_data, type = "EMRO")  # Add type column
+
+# Extract Iran's data using base R
+iran_data <- subset(Finaldataset_MPH, location == "iran, islamic rep.")  # Filter Iran
+iran_data <- iran_data[, c("year", "death_pop")]  # Select columns
+colnames(iran_data)[colnames(iran_data) == "death_pop"] <- "mean_death_pop"  # Rename
+iran_data <- transform(iran_data, type = "Iran")  # Add type column
+
+# Combine datasets
+plot_data <- rbind(mean_data, iran_data, emro_data)  # Combine all data
+
+# Create the enhanced line graph with mean, Iran, and EMRO data
+plot3 <- ggplot(plot_data, aes(x = year, y = mean_death_pop, color = type, linetype = type)) +
+  geom_line(size = 1.2) +  # Lines for all three
+  geom_point(shape = 15, size = 3) +  # Square points for all
+  labs(title = "Trend in Mean Deaths (1990–2019)",
+       subtitle = "Across World, EMRO, and Iran",
+       x = NULL,
+       y = "Mean deaths per 1 million population") +
+  scale_y_continuous(limits = c(0, 150), breaks = seq(0, 150, by = 10)) +  # Y-axis 0 to 70
+  scale_x_continuous(breaks = seq(1990, 2019, by = 5)) +  # X-axis every 5 years
+  scale_color_manual(values = c("World" = "#0072B2", 
+                                "Iran" = "red", 
+                                "EMRO" = "#009E73")) +  # Blue, orange, green
+  scale_linetype_manual(values = c("World" = "solid", 
+                                   "Iran" = "solid", 
+                                   "EMRO" = "solid")) +  # Solid, dashed, dotted
+  theme_minimal() +  # Clean base theme
+  theme(
+    legend.position = "bottom",  # Legend at bottom
+    legend.title = element_blank(),  # No legend title
+    legend.text = element_text(size = 10),  # Legend text size
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, color = "black"),  # Centered title
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "grey30"),  # Subtitle
+    axis.title.y = element_text(size = 14, color = "black", margin = margin(r = 10)),
+    axis.text.x = element_text(size = 12, color = "black", angle = 0, hjust = 0.5),  # Horizontal x-axis labels
+    axis.text.y = element_text(size = 12, color = "black"),
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    plot.background = element_rect(fill = "white", color = NA),  # White plot background
+    panel.background = element_rect(fill = "white", color = NA),  # White panel
+    axis.line = element_line(color = "black", size = 0.5),  # Axis lines
+    plot.margin = margin(t = 15, r = 15, b = 15, l = 15)  # Extra margin
+  )
 plot3
 
 
@@ -218,13 +285,60 @@ plot4 <- ggplot(mean_daly_pop, aes(x = income, y = mean_daly_pop, fill = income)
 plot4
 
 
-plot5 <- ggplot(Finaldataset_MPH, aes(x = year, y = (daly_pop/191), fill = year)) +
-  geom_bar(stat = "identity") +
-  labs(title = NULL, x = NULL, y = "Mean DALY per 1 million population per each country") +
-  theme_classic() +
-  theme(legend.position = "none") +
-  theme(axis.text.x = element_text(size = 12, color = "black"),
-        axis.text.y = element_text(size = 12, color = "black"))
+# Aggregate mean death_pop across 191 countries (using dplyr for simplicity)
+mean_data <- Finaldataset_MPH %>%
+  group_by(year) %>%
+  summarise(mean_daly_pop = mean(daly_pop, na.rm = TRUE)) %>%
+  mutate(type = "World")  # Label for mean
+
+# Extract EMRO data using base R
+emro_data <- subset(Finaldataset_MPH, location %in% emro_countries)  # Filter EMRO countries
+emro_data <- aggregate(daly_pop ~ year, data = emro_data, mean, na.rm = TRUE)  # Mean per year
+colnames(emro_data)[colnames(emro_data) == "daly_pop"] <- "mean_daly_pop"  # Rename
+emro_data <- transform(emro_data, type = "EMRO")  # Add type column
+
+# Extract Iran's data using base R
+iran_data <- subset(Finaldataset_MPH, location == "iran, islamic rep.")  # Filter Iran
+iran_data <- iran_data[, c("year", "daly_pop")]  # Select columns
+colnames(iran_data)[colnames(iran_data) == "daly_pop"] <- "mean_daly_pop"  # Rename
+iran_data <- transform(iran_data, type = "Iran")  # Add type column
+
+# Combine datasets
+plot_data <- rbind(mean_data, iran_data, emro_data)  # Combine all data
+
+# Create the enhanced line graph with mean, Iran, and EMRO data
+plot5 <- ggplot(plot_data, aes(x = year, y = mean_daly_pop, color = type, linetype = type)) +
+  geom_line(size = 1.2) +  # Lines for all three
+  geom_point(shape = 15, size = 3) +  # Square points for all
+  labs(title = "Trend in Mean DALY (1990–2019)",
+       subtitle = "Across World, EMRO, and Iran",
+       x = NULL,
+       y = "Mean DALY per 1 million population") +
+  scale_y_continuous(limits = c(0, 2500), breaks = seq(0, 2500, by = 100)) +  # Y-axis 0 to 70
+  scale_x_continuous(breaks = seq(1990, 2019, by = 5)) +  # X-axis every 5 years
+  scale_color_manual(values = c("World" = "#0072B2", 
+                                "Iran" = "red", 
+                                "EMRO" = "#009E73")) +  # Blue, orange, green
+  scale_linetype_manual(values = c("World" = "solid", 
+                                   "Iran" = "solid", 
+                                   "EMRO" = "solid")) +  # Solid, dashed, dotted
+  theme_minimal() +  # Clean base theme
+  theme(
+    legend.position = "bottom",  # Legend at bottom
+    legend.title = element_blank(),  # No legend title
+    legend.text = element_text(size = 10),  # Legend text size
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, color = "black"),  # Centered title
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "grey30"),  # Subtitle
+    axis.title.y = element_text(size = 14, color = "black", margin = margin(r = 10)),
+    axis.text.x = element_text(size = 12, color = "black", angle = 0, hjust = 0.5),  # Horizontal x-axis labels
+    axis.text.y = element_text(size = 12, color = "black"),
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    plot.background = element_rect(fill = "white", color = NA),  # White plot background
+    panel.background = element_rect(fill = "white", color = NA),  # White panel
+    axis.line = element_line(color = "black", size = 0.5),  # Axis lines
+    plot.margin = margin(t = 15, r = 15, b = 15, l = 15)  # Extra margin
+  )
 plot5
 
 iran <- filter(Finaldataset_MPH, location == "iran, islamic rep.")
@@ -457,6 +571,8 @@ plot11
 # Extracting random effects
 ranef_4 <- ranef(model4_4)
 ranef_4 <- as.data.frame(ranef_4$location)
+ranef_4$year <- ranef_4$year + fixef(model4_4)[7]
+ranef_4$year <- (exp(ranef_4$year) - 1) * 100
 ranef_4$location <- row.names(ranef_4)
 
 
@@ -466,9 +582,9 @@ random_effect <- left_join(world_map, ranef_4, by = c("region" = "location"))
 plot12 <- ggplot(data = random_effect) + 
   geom_polygon(aes(x = long, y = lat, group = group, fill = year), color = "white") +
   scale_fill_gradient(low = "#fee5d9", high = "#a50f15", na.value = "grey50",
-                      name = "Random effect estimates") +
+                      name = "EAPC") +
   theme_void() +
-  labs(title = "Random effect estimates of year for each country (Death)") +
+  labs(title = "EAPC for each country (DALY)") +
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
         legend.position = "right",
         legend.title.align = 0.5)
@@ -486,7 +602,7 @@ random_effect_1 <- left_join(world_map, ranef_1, by = c("region" = "location"))
 
 plot13 <- ggplot(data = random_effect_1) + 
   geom_polygon(aes(x = long, y = lat, group = group, fill = year), color = "white") +
-  scale_fill_gradient(low = "#fee5d9", high = "#a50f15", na.value = "grey50",
+  scale_fill_gradient(low = "#fee5d9", high = "red", na.value = "grey50",
                       name = "Random effect estimates") +
   theme_void() +
   labs(title = "Random effect estimates of year for each country (DALY)") +
@@ -497,3 +613,19 @@ plot13 <- ggplot(data = random_effect_1) +
 plot13
 
 
+
+
+library(ggplot2)
+
+Finaldataset_MPH2019 <- subset(Finaldataset_MPH, year == 2019)
+
+
+ggplot(Finaldataset_MPH, aes(x = pop65, y = daly_pop)) +
+  geom_point(color = "steelblue", size = 1) +        # scatter points
+  geom_smooth(method = "loess", se = TRUE, color = "darkred", size = 1) +  
+  theme_classic() +
+  labs(
+    x = "Percentage of Population Aged over 65",       # x-axis label
+    y = "Mean DALY per 1 million",     # y-axis label
+    title = NULL
+  )
