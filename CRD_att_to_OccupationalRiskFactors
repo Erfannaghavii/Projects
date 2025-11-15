@@ -1,0 +1,458 @@
+# Loading libraries
+library(writexl)
+library(readxl)
+library(ggplot2)
+library(lme4)
+library(dplyr)
+library(lmerTest)
+library(pbkrtest)
+library(maps)
+library(afex)
+library(ggplot2)
+library(tableone)
+
+# Loading the dataset
+Finaldataset_MPH <- read.csv("C:/Users/mehdi/Desktop/Projects/33 - Shayan/R script/data.csv")
+Finaldataset_MPH <- Finaldataset_MPH[1:2688, ]
+
+Table <- subset(Finaldataset_MPH, year == 2021)
+
+# Preparing the "risk" variable for input
+Finaldataset_MPH$risk <- as.factor(Finaldataset_MPH$risk)
+levels(Finaldataset_MPH$risk)
+Finaldataset_MPH$risk <- relevel(Finaldataset_MPH$risk, ref = "Occupational risks")
+
+# Converting female percentage to male percentage
+Finaldataset_MPH$female <- 100 - Finaldataset_MPH$female
+colnames(Finaldataset_MPH)[8] <- "male"
+
+# Turning death and daly rates based on 1 million of population
+a <- numeric(nrow(Finaldataset_MPH))
+b <- numeric(nrow(Finaldataset_MPH))
+c <- numeric(nrow(Finaldataset_MPH))
+for (i in 1:nrow(Finaldataset_MPH)) {
+  a[i] <- as.numeric(Finaldataset_MPH$crd_death[i])
+  b[i] <- as.numeric(Finaldataset_MPH$pop[i])
+  c[i] <- as.numeric(Finaldataset_MPH$crd_daly[i])
+  Finaldataset_MPH$death_pop[i] <- (a[i]/b[i]) * 1000000
+  Finaldataset_MPH$daly_pop[i] <- (c[i]/b[i]) * 1000000
+  
+}
+
+a <- numeric(nrow(Finaldataset_MPH))
+b <- numeric(nrow(Finaldataset_MPH))
+c <- numeric(nrow(Finaldataset_MPH))
+for (i in 1:nrow(Finaldataset_MPH)) {
+  a[i] <- as.numeric(Finaldataset_MPH$death[i])
+  b[i] <- as.numeric(Finaldataset_MPH$pop[i])
+  c[i] <- as.numeric(Finaldataset_MPH$daly[i])
+  Finaldataset_MPH$death_pop_risk[i] <- (a[i]/b[i]) * 1000000
+  Finaldataset_MPH$daly_pop_risk[i] <- (c[i]/b[i]) * 1000000
+  
+}
+
+Table <- subset(Finaldataset_MPH, year == 2021)
+write.csv(Table, file = "Table.csv", row.names = FALSE)
+
+
+
+# Aggregate mean death_pop across 191 countries (using dplyr for simplicity)
+mean_data <- Finaldataset_MPH %>%
+  group_by(year) %>%
+  summarise(mean_death_pop = mean(death_pop, na.rm = TRUE)) %>%
+  mutate(type = "EMRO")
+
+# Extract Iran's data using base R
+iran_data <- subset(Finaldataset_MPH, code == "IRN")
+iran_data <- iran_data[, c("year", "death_pop")]
+colnames(iran_data)[colnames(iran_data) == "death_pop"] <- "mean_death_pop"
+iran_data <- transform(iran_data, type = "Iran")
+iran_data <- unique(iran_data)
+
+# Combine datasets
+plot_data <- rbind(mean_data, iran_data)  # Combine all data
+
+# Create the enhanced line graph with mean, and Iran
+plot1 <- ggplot(plot_data, aes(x = year, y = mean_death_pop, color = type, linetype = type)) +
+  geom_line(size = 1.2) +  # Lines for all three
+  geom_point(shape = 15, size = 3) +  # Square points for all
+  labs(title = "Trend in Mean Deaths (1990–2021)",
+       subtitle = "Across EMRO and Iran",
+       x = NULL,
+       y = "Mean deaths per 1 million population") +
+  scale_y_continuous(limits = c(50, 300), breaks = seq(50, 300, by = 10)) +  # Y-axis 0 to 70
+  scale_x_continuous(breaks = seq(1990, 2021, by = 5)) +  # X-axis every 5 years
+  scale_color_manual(values = c("Iran" = "red", 
+                                "EMRO" = "#009E73")) +
+  scale_linetype_manual(values = c("Iran" = "solid", 
+                                   "EMRO" = "solid")) +  # Solid, dashed, dotted
+  theme_minimal() +  # Clean base theme
+  theme(
+    legend.position = "bottom",  # Legend at bottom
+    legend.title = element_blank(),  # No legend title
+    legend.text = element_text(size = 10),  # Legend text size
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, color = "black"),  # Centered title
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "grey30"),  # Subtitle
+    axis.title.y = element_text(size = 14, color = "black", margin = margin(r = 10)),
+    axis.text.x = element_text(size = 12, color = "black", angle = 0, hjust = 0.5),  # Horizontal x-axis labels
+    axis.text.y = element_text(size = 12, color = "black"),
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    plot.background = element_rect(fill = "white", color = NA),  # White plot background
+    panel.background = element_rect(fill = "white", color = NA),  # White panel
+    axis.line = element_line(color = "black", size = 0.5),  # Axis lines
+    plot.margin = margin(t = 15, r = 15, b = 15, l = 15)  # Extra margin
+  )
+plot1
+
+
+global_pop <- read.csv("C:/Users/mehdi/Desktop/Projects/33 - Shayan/R script/pop.csv")
+
+global_pop <- t(global_pop)
+global_pop <- global_pop[ -1 ,  ]
+global_pop <- as.data.frame(global_pop)
+global_pop$year <- 1990:2021
+colnames(global_pop)[1] <- "location"
+
+global_crd <- read.csv("C:/Users/mehdi/Desktop/Projects/33 - Shayan/R script/crd_global3.csv")
+
+global_crd <- merge(global_crd, global_pop, by = "year")
+
+global_crd$mean_death_pop <- as.numeric(as.character(global_crd$mean_death_pop))
+global_crd$location.y <- as.numeric(as.character(global_crd$location.y))
+global_crd$mean_death_pop <- (global_crd$mean_death_pop/global_crd$location.y) * 1000000
+
+global_crd <- global_crd[ , -4]
+colnames(global_crd)[2] <- "type"
+global_crd["Global"] <- "World"
+global_crd <- global_crd[ , -2]
+colnames(global_crd)[3] <- "type"
+
+# Aggregate mean death_pop across 191 countries (using dplyr for simplicity)
+mean_data <- Finaldataset_MPH %>%
+  group_by(year) %>%
+  summarise(mean_death_pop = mean(death_pop, na.rm = TRUE)) %>%
+  mutate(type = "EMRO")
+
+# Extract Iran's data using base R
+iran_data <- subset(Finaldataset_MPH, code == "IRN")
+iran_data <- iran_data[, c("year", "death_pop")]
+colnames(iran_data)[colnames(iran_data) == "death_pop"] <- "mean_death_pop"
+iran_data <- transform(iran_data, type = "Iran")
+iran_data <- unique(iran_data)
+
+# Combine datasets
+plot_data <- rbind(global_crd, mean_data, iran_data)  # Combine all data
+
+# Create the enhanced line graph with mean, and Iran
+plot2 <- ggplot(plot_data, aes(x = year, y = mean_death_pop, color = type, linetype = type)) +
+  geom_line(size = 1.2) +  # Lines for all three
+  geom_point(shape = 15, size = 3)  +
+labs(title = "Trend in Mean Death (1990–2021)",
+       subtitle = "Across World, EMRO and Iran",
+       x = NULL,
+       y = "Mean Death per 1 million population") +
+  scale_y_continuous(limits = c(0, 500), breaks = seq(0, 500, by = 50)) + # Y-axis 0 to 70
+  scale_x_continuous(breaks = seq(1990, 2021, by = 5)) +  # X-axis every 5 years
+  scale_color_manual(values = c("Iran" = "red", 
+                                "EMRO" = "#009E73",
+                                "World" = "blue")) +
+  scale_linetype_manual(values = c("Iran" = "solid", 
+                                   "EMRO" = "solid",
+                                   "World" = "solid")) +  # Solid, dashed, dotted
+  theme_minimal() +  # Clean base theme
+  theme(
+    legend.position = "bottom",  # Legend at bottom
+    legend.title = element_blank(),  # No legend title
+    legend.text = element_text(size = 10),  # Legend text size
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, color = "black"),  # Centered title
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "grey30"),  # Subtitle
+    axis.title.y = element_text(size = 14, color = "black", margin = margin(r = 10)),
+    axis.text.x = element_text(size = 12, color = "black", angle = 0, hjust = 0.5),  # Horizontal x-axis labels
+    axis.text.y = element_text(size = 12, color = "black"),
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    plot.background = element_rect(fill = "white", color = NA),  # White plot background
+    panel.background = element_rect(fill = "white", color = NA),  # White panel
+    axis.line = element_line(color = "black", size = 0.5),  # Axis lines
+    plot.margin = margin(t = 15, r = 15, b = 15, l = 15)  # Extra margin
+  )
+plot2
+
+
+
+risk <- subset(Finaldataset_MPH, risk == "Occupational risks")
+asthma <- subset(Finaldataset_MPH, risk == "Occupational asthmagens")
+carcinogen <- subset(Finaldataset_MPH, risk == "Occupational carcinogens")
+part <- subset(Finaldataset_MPH, risk == "Occupational particulate matter, gases, and fumes")
+
+# Creating an LMEM 
+model <- lmer(log(daly_pop_risk) ~ 1 + pop65 + gdp + male + year +
+                (1 + year | location),
+              data=part,
+              control = lmerControl(optimizer = "bobyqa", calc.derivs = FALSE, optCtrl = list(maxfun = 1e5)))
+
+summary(model)
+
+# Doing likelihood-ratio test:
+model_2 <- lmer(log(daly_pop) ~ 1 + pop65 + gdp + male + year +
+                  (1 + year | location),
+                data=Finaldataset_MPH,
+                control = lmerControl(optimizer = "bobyqa", calc.derivs = FALSE, optCtrl = list(maxfun = 1e5)))
+anova(model, model_2)
+
+
+# Extracting random effects
+ranef_4 <- ranef(model)
+ranef_4 <- as.data.frame(ranef_4$location)
+ranef_4$location <- row.names(model)
+
+ranef_4$year <- ranef_4$year + fixef(model)[8]
+
+
+random_effect <- left_join(world_map, ranef_4, by = c("region" = "location"))
+
+
+plot12 <- ggplot(data = random_effect) + 
+  geom_polygon(aes(x = long, y = lat, group = group, fill = year), color = "white") +
+  scale_fill_gradient(low = "#fee5d9", high = "#a50f15", na.value = "grey50",
+                      name = "Random effect estimates") +
+  theme_void() +
+  labs(title = "Random effect estimates of year for each country (Death)") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.position = "right",
+        legend.title.align = 0.5)
+
+plot12
+
+# 
+# model1_1 <- lmer(daly_pop ~ 1 + popm + pop65 + income  + hdi +
+#                    (1 + year | location),
+#                  data=Finaldataset_MPH,
+#                  control = lmerControl(calc.derivs = FALSE))
+# 
+# model1_1_2 <- lmer(daly_pop ~ 1 + popm + pop65 + hdi +
+#                      (1 + year | location),
+#                    data=Finaldataset_MPH,
+#                    control = lmerControl(calc.derivs = FALSE))
+# 
+# anova(model1_1_2, model1_1)
+# 
+# summary(model1_1)
+
+
+# lht <- mixed(death_pop ~ 1 + popm + pop65 + year + income  + hdi +
+#                     (1 + year | location),
+#                   data=Finaldataset_MPH,
+#                   control = lmerControl(optimizer = "bobyqa"), method = 'LRT')
+# summary(lht)
+
+# Creating descriptive statistics
+desc1 <- CreateTableOne(data = Finaldataset_MPH,
+                        vars = c("male", "pop65", "death_pop", "daly_pop"))
+desc1
+
+desc2 <- CreateTableOne(data = Finaldataset_MPH, strata = "risk",
+                        vars = c("death_pop_risk", "daly_pop_risk"))
+desc2
+
+mean(subset(Finaldataset_MPH, year == 2016)$death_pop)
+
+# Plots
+plot3 <- ggplot(Finaldataset_MPH, aes(x = year, y = (death_pop/84), fill = year)) +
+  geom_bar(stat = "identity") +
+  labs(title = NULL, x = NULL, y = "Mean death per 1 million population per each country") +
+  theme_classic() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"))
+plot3
+
+
+plot5 <- ggplot(Finaldataset_MPH, aes(x = year, y = (daly_pop/84), fill = year)) +
+  geom_bar(stat = "identity") +
+  labs(title = NULL, x = NULL, y = "Mean DALY per 1 million population per each country") +
+  theme_classic() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"))
+plot5
+
+
+# The plot for Iran
+iran <- filter(Finaldataset_MPH, code == "IRN")
+
+plot6 <- ggplot(iran, aes(x = year, y = (death_pop/4), fill = year)) +
+  geom_bar(stat = "identity") +
+  labs(title = NULL, x = NULL, y = "Mean death per 1 million population in Iran") +
+  theme_classic() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"))
+plot6
+
+plot7 <- ggplot(iran, aes(x = year, y = (daly_pop/4), fill = year)) +
+  geom_bar(stat = "identity") +
+  labs(title = NULL, x = NULL, y = "Mean DALY per 1 million population in Iran") +
+  theme_classic() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"))
+plot7
+
+
+# Creating world map
+world_map <- map_data("world")
+world_map$region <- tolower(world_map$region)
+
+# Changing some country names:
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "yemen", "yemen", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "vietnam", "viet nam", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "venezuela", "venezuela, rb", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "saint vincent", "st. vincent and the grenadines", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "grenadines", "st. vincent and the grenadines", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "usa", "united states", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "turkey", "turkiye", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "trinidad", "trinidad and tobago", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "syria", "syrian arab republic", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "slovakia", "slovak republic", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "russia", "russian federation", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "palestine", "palestine", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "saint lucia", "st. lucia", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "south korea", "korea, rep.", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "saint kitts", "st. kitts and nevis", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "kyrgyzstan", "kyrgyz republic", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "iran", "iran (islamic republic of)", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "gambia", "gambia, the", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "uk", "united kingdom", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "micronesia", "micronesia, fed. sts.", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "egypt", "egypt", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "czech republic", "czechia", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "republic of congo", "congo, rep.", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "democratic republic of the congo", "congo, dem. rep.", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "ivory coast", "cote d'ivoire", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "brunei", "brunei darussalam", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "bahamas", "bahamas, the", region))
+
+world_map <- world_map %>%
+  mutate(region = ifelse(region == "bahamas", "bahamas, the", region))
+
+
+mean_death_pop_count <- Finaldataset_MPH %>%
+  group_by(location) %>%
+  summarise(mean_death_pop = mean(death_pop, na.rm = TRUE))
+
+mean_daly_pop_count <- Finaldataset_MPH %>%
+  group_by(location) %>%
+  summarise(mean_daly_pop = mean(daly_pop, na.rm = TRUE))
+
+mean_death_pop_count$location <- tolower(mean_death_pop_count$location)
+mean_daly_pop_count$location <- tolower(mean_daly_pop_count$location)
+
+plot10_data_death <- left_join(world_map, mean_death_pop_count, by = c("region" = "location"))
+plot10_data_daly <- left_join(world_map, mean_daly_pop_count, by = c("region" = "location"))
+
+
+plot10 <- ggplot(data = plot10_data_death) + 
+  geom_polygon(aes(x = long, y = lat, group = group, fill = mean_death_pop), color = "white") +
+  scale_fill_gradient(low = "#fee5d9", high = "#a50f15", na.value = "grey50",
+                      name = "Mean Deaths per Million") +
+  theme_void() +
+  labs(title = "World Map of Mean Deaths per Million per Year") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.position = "right",
+        legend.title.align = 0.5)
+
+plot10
+
+plot11 <- ggplot(data = plot10_data_daly) + 
+  geom_polygon(aes(x = long, y = lat, group = group, fill = mean_daly_pop), color = "white") +
+  scale_fill_gradient(low = "#fee5d9", high = "#a50f15", na.value = "grey50",
+                      name = "Mean DALY per Million") +
+  theme_void() +
+  labs(title = "World Map of Mean DALY per Million per Year") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.position = "right",
+        legend.title.align = 0.5)
+
+plot11
+
+
+# Extracting random effects
+ranef_4 <- ranef(model)
+ranef_4 <- as.data.frame(ranef_4$location)
+ranef_4$location <- row.names(ranef_4)
+ranef_4$location <- tolower(ranef_4$location)
+
+ranef_4$year <- ranef_4$year + fixef(model)[5]
+
+ranef_4$year <- 100 * (exp(ranef_4$year) - 1)
+
+
+random_effect <- left_join(world_map, ranef_4, by = c("region" = "location"))
+
+
+plot12 <- ggplot(data = random_effect) + 
+  geom_polygon(aes(x = long, y = lat, group = group, fill = year), color = "white") +
+  scale_fill_gradient(low = "#fee5d9", high = "#a50f15", na.value = "grey50",
+                      name = "EAPC") +
+  theme_void() +
+  labs(title = "EAPC for each country (DALY)") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.position = "right",
+        legend.title.align = 0.5)
+
+plot12
